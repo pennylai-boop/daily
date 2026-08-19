@@ -1,8 +1,12 @@
 import { DEFAULT_ROUTINES } from "./routines";
 import type {
   AppSettings,
+  CustomMood,
   DailyState,
+  DayEntry,
   EntryBlock,
+  EntryPhoto,
+  MoodLevel,
   Profile,
   Routine,
   ShareRecipient,
@@ -16,8 +20,9 @@ export const THEME_KEY = "daily.theme";
 /**
  * 2：觀心書從五個問答改成身／口／意的條列。
  * 3：分享對象從 email 改成 LINE 邀請。
+ * 4：加入自訂心情與當天的照片紀錄。
  */
-export const STORE_VERSION = 3;
+export const STORE_VERSION = 4;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   profile: { name: "", lineUserId: "" },
@@ -28,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const EMPTY_STATE: DailyState = {
   version: STORE_VERSION,
   entries: {},
+  customMoods: [],
   routines: [],
   checks: {},
   settings: DEFAULT_SETTINGS,
@@ -64,12 +70,20 @@ export function loadState(): DailyState {
   }
 }
 
-export function saveState(state: DailyState): void {
-  if (typeof window === "undefined") return;
+/**
+ * 回傳是否真的寫進去了。
+ *
+ * 照片會讓 localStorage 逼近 5MB 的上限，靜靜吞掉失敗會讓使用者以為存好了，
+ * 所以失敗要往上回報，由呼叫端回捲並提示。
+ */
+export function saveState(state: DailyState): boolean {
+  if (typeof window === "undefined") return false;
   try {
     window.localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    return true;
   } catch {
-    // 私密瀏覽或容量已滿時忽略寫入失敗，畫面仍可繼續操作。
+    // 私密瀏覽模式不允許寫入，或容量已滿。
+    return false;
   }
 }
 
@@ -80,23 +94,58 @@ export function normalizeState(value: unknown): DailyState {
   const entries: DailyState["entries"] = {};
   if (isRecord(candidate.entries)) {
     for (const [date, entry] of Object.entries(candidate.entries as DailyState["entries"])) {
-      entries[date] = {
-        ...entry,
-        blocks: (entry.blocks ?? []).map(normalizeBlock),
-        focus: entry.focus ?? [],
-      };
+      entries[date] = normalizeEntry(entry);
     }
   }
 
   return {
     version: STORE_VERSION,
     entries,
+    customMoods: Array.isArray(candidate.customMoods)
+      ? candidate.customMoods.map(normalizeCustomMood).filter((mood) => mood !== null)
+      : [],
     routines: Array.isArray(candidate.routines) ? candidate.routines.map(withTemplate) : [],
     checks: isRecord(candidate.checks) ? (candidate.checks as DailyState["checks"]) : {},
     settings: mergeSettings(candidate.settings),
     sharedWithMe: Array.isArray(candidate.sharedWithMe)
       ? candidate.sharedWithMe.map(normalizeJournal)
       : [],
+  };
+}
+
+/** v3 以前沒有 photos 欄位。 */
+function normalizeEntry(entry: DayEntry): DayEntry {
+  return {
+    ...entry,
+    blocks: (entry.blocks ?? []).map(normalizeBlock),
+    focus: entry.focus ?? [],
+    photos: Array.isArray(entry.photos) ? entry.photos.filter(isPhoto) : [],
+  };
+}
+
+function isPhoto(value: EntryPhoto): boolean {
+  return typeof value?.id === "string" && typeof value.dataUrl === "string";
+}
+
+const MOOD_LEVEL_IDS: MoodLevel[] = ["great", "good", "okay", "low", "bad"];
+
+/** 壞掉的自訂心情（沒有標籤，或既沒 emoji 也沒圖）直接丟掉，不然畫面會出現空白格。 */
+function normalizeCustomMood(value: CustomMood): CustomMood | null {
+  const label = typeof value?.label === "string" ? value.label.trim() : "";
+  const emoji = typeof value?.emoji === "string" && value.emoji ? value.emoji : null;
+  const imageDataUrl =
+    typeof value?.imageDataUrl === "string" && value.imageDataUrl.startsWith("data:")
+      ? value.imageDataUrl
+      : null;
+  if (!value?.id || !label || (!emoji && !imageDataUrl)) return null;
+
+  return {
+    id: value.id,
+    label,
+    emoji,
+    imageDataUrl,
+    level: MOOD_LEVEL_IDS.includes(value.level) ? value.level : "okay",
+    createdAt: value.createdAt ?? new Date().toISOString(),
   };
 }
 

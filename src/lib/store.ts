@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
+import { createCustomMoodId } from "./moods";
 import {
   createId,
   createInviteCode,
@@ -11,10 +12,12 @@ import {
   saveState,
 } from "./storage";
 import type {
+  CustomMood,
   DailyState,
   DayEntry,
   IsoDate,
   LineSettings,
+  MoodLevel,
   Profile,
   Routine,
   ShareRecipient,
@@ -64,15 +67,27 @@ function getServerSnapshot(): DailyState | null {
   return null;
 }
 
-function commit(updater: (current: DailyState) => DailyState): void {
-  const next = updater(cache ?? loadState());
+/**
+ * 回傳是否寫入成功。照片可能把 localStorage 撐爆，寫不進去時要回捲記憶體中的狀態，
+ * 否則畫面會顯示一份重新載入後就消失的資料。
+ */
+function commit(updater: (current: DailyState) => DailyState): boolean {
+  const previous = cache ?? loadState();
+  const next = updater(previous);
   cache = next;
-  saveState(next);
+
+  if (!saveState(next)) {
+    cache = previous;
+    emit();
+    return false;
+  }
+
   emit();
+  return true;
 }
 
-export function saveEntry(entry: DayEntry): void {
-  commit((current) => ({
+export function saveEntry(entry: DayEntry): boolean {
+  return commit((current) => ({
     ...current,
     entries: { ...current.entries, [entry.date]: entry },
   }));
@@ -83,6 +98,43 @@ export function deleteEntry(date: IsoDate): void {
     const entries = { ...current.entries };
     delete entries[date];
     return { ...current, entries };
+  });
+}
+
+export function addCustomMood(input: {
+  label: string;
+  emoji: string | null;
+  imageDataUrl: string | null;
+  level: MoodLevel;
+}): { ok: boolean; mood: CustomMood } {
+  const mood: CustomMood = {
+    id: createCustomMoodId(createId()),
+    label: input.label.trim(),
+    emoji: input.imageDataUrl ? null : input.emoji,
+    imageDataUrl: input.imageDataUrl,
+    level: input.level,
+    createdAt: new Date().toISOString(),
+  };
+
+  const ok = commit((current) => ({ ...current, customMoods: [...current.customMoods, mood] }));
+  return { ok, mood };
+}
+
+/**
+ * 刪除自訂心情，並把用過它的日子改回沒有心情。
+ * 留著孤兒 id 的話那些日子在日曆上會變成空格，看起來像資料掉了。
+ */
+export function removeCustomMood(id: string): void {
+  commit((current) => {
+    const entries: DailyState["entries"] = {};
+    for (const [date, entry] of Object.entries(current.entries)) {
+      entries[date] = entry.mood === id ? { ...entry, mood: null } : entry;
+    }
+    return {
+      ...current,
+      entries,
+      customMoods: current.customMoods.filter((mood) => mood.id !== id),
+    };
   });
 }
 
@@ -254,6 +306,8 @@ export interface DailyStore {
   ready: boolean;
   saveEntry: typeof saveEntry;
   deleteEntry: typeof deleteEntry;
+  addCustomMood: typeof addCustomMood;
+  removeCustomMood: typeof removeCustomMood;
   addRoutine: typeof addRoutine;
   updateRoutine: typeof updateRoutine;
   deleteRoutine: typeof deleteRoutine;
@@ -276,6 +330,8 @@ export function useDailyStore(): DailyStore {
     ready: snapshot !== null,
     saveEntry,
     deleteEntry,
+    addCustomMood,
+    removeCustomMood,
     addRoutine,
     updateRoutine,
     deleteRoutine,
@@ -291,7 +347,11 @@ export function useDailyStore(): DailyStore {
   };
 }
 
+/**
+ * 心情留 null，由紀錄頁顯示成預設的「開心」。
+ * 真正寫進資料的時機在 `applyDefaultMood`：有內容才記，只是點開某一天不會留下痕跡。
+ */
 export function createDayEntry(date: IsoDate): DayEntry {
   const now = new Date().toISOString();
-  return { date, mood: null, blocks: [], focus: [], createdAt: now, updatedAt: now };
+  return { date, mood: null, blocks: [], focus: [], photos: [], createdAt: now, updatedAt: now };
 }

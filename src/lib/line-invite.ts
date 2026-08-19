@@ -6,7 +6,10 @@
  * 對方點開後用 LINE 登入才建立關聯。
  *
  * LIFF SDK 只有在頁面以 LIFF app 開啟時才會存在；不在 LINE 裡就退回系統分享面板或複製連結。
+ * 包成 App 之後一定走不到 LIFF（那是 LINE 自己瀏覽器裡的 API），因此第二順位是原生殼的分享橋接。
  */
+
+import { hasNativeShare, nativeShare } from "./native-bridge";
 
 interface LiffLike {
   isApiAvailable: (name: string) => boolean;
@@ -47,6 +50,11 @@ export async function shareInvite(ownerName: string, code: string): Promise<Invi
     }
   }
 
+  if (hasNativeShare()) {
+    const handled = await nativeShare({ kind: "text", title: "天天 daily", text, url });
+    if (handled) return "share";
+  }
+
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
       await navigator.share({ title: "天天 daily", text, url });
@@ -56,10 +64,33 @@ export async function shareInvite(ownerName: string, code: string): Promise<Invi
     }
   }
 
-  await navigator.clipboard.writeText(url);
+  await copyText(url);
   return "clipboard";
 }
 
 export async function copyInviteUrl(code: string): Promise<void> {
-  await navigator.clipboard.writeText(inviteUrl(code));
+  await copyText(inviteUrl(code));
+}
+
+/**
+ * Android WebView 常常沒有 navigator.clipboard（需要 HTTPS 與額外權限），
+ * 所以退回舊的 execCommand 做法，至少複製得到連結。
+ */
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    // 往下走備援。
+  }
+
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  document.execCommand("copy");
+  field.remove();
 }

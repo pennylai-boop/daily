@@ -176,6 +176,7 @@ export function buildDemoState(): DailyState {
       mood: DEMO_MOODS[seed % DEMO_MOODS.length],
       blocks: [],
       focus: [],
+      photos: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -240,6 +241,7 @@ export function buildDemoState(): DailyState {
   return {
     version: STORE_VERSION,
     entries,
+    customMoods: [],
     routines,
     checks,
     settings: buildDemoSettings(),
@@ -310,6 +312,7 @@ function buildDemoSharedJournals(): SharedJournal[] {
     mood,
     blocks,
     focus,
+    photos: [],
     createdAt: now,
     updatedAt: now,
   });

@@ -132,12 +132,45 @@ body {
     overflow-wrap: anywhere;
   }
 
+  /* 打氣小語換句時的淡入，由 React 的 key 觸發重播（見 pep-talk-banner.tsx）。 */
+  @keyframes pep-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .pep-fade-in {
+    animation: pep-fade-in 260ms ease-out;
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
 
   .no-scrollbar {
     scrollbar-width: none;
+  }
+
+  /*
+   * 依執行環境切換 UI。data-platform 由 platformBootstrapScript 在首次繪製前寫入，
+   * 所以用 CSS 而不是 React 條件式，避免 hydration 前先閃出不該出現的東西。
+   *
+   * iOS App 內必須隱藏贊助入口：App Store 規則 3.1.1 與 3.2.2(iv) 不允許非核准公益團體
+   * 在 App 內收款，也不允許放按鈕或連結導向 IAP 以外的付款方式。網頁版與 Android 不受限。
+   */
+  [data-platform="ios"] .hide-in-ios-app {
+    display: none !important;
+  }
+
+  .only-in-ios-app {
+    display: none;
+  }
+
+  [data-platform="ios"] .only-in-ios-app {
+    display: block;
   }
 }
 

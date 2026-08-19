@@ -1,7 +1,7 @@
 /** 日期一律使用本地時區的 `YYYY-MM-DD` 字串，避免 UTC 位移造成跨日錯誤。 */
 export type IsoDate = string;
 
-export type MoodId =
+export type BuiltInMoodId =
   | "radiant"
   | "happy"
   | "calm"
@@ -11,6 +11,32 @@ export type MoodId =
   | "anxious"
   | "down"
   | "angry";
+
+/**
+ * 自訂心情的 id 一律是 `custom:` 開頭，因此不會和內建的撞名。
+ * `(string & {})` 讓內建 id 仍然有自動完成，同時容得下自訂的字串。
+ */
+export type MoodId = BuiltInMoodId | (string & {});
+
+/** 新使用者一進紀錄頁就是這個心情，沒有特別選過也會以它入帳。 */
+export const DEFAULT_MOOD_ID: BuiltInMoodId = "happy";
+
+/**
+ * 自訂心情的正負向程度。折線圖需要一個分數，但要使用者自己填 1–5 太抽象，
+ * 所以改成挑一個程度，分數與色票由 `src/lib/moods.ts` 換算。
+ */
+export type MoodLevel = "great" | "good" | "okay" | "low" | "bad";
+
+/** 使用者自己建立的心情。圖示可以是 emoji，也可以是上傳並壓縮過的小圖。 */
+export interface CustomMood {
+  id: string;
+  label: string;
+  emoji: string | null;
+  /** 壓縮成 96×96 的 data URL；有值時優先於 emoji 顯示。 */
+  imageDataUrl: string | null;
+  level: MoodLevel;
+  createdAt: string;
+}
 
 export type TemplateId = "diary" | "gratitude" | "mindfulness";
 
@@ -58,11 +84,21 @@ export interface FocusItem {
   done: boolean;
 }
 
+/** 當天的照片紀錄。上傳時會壓縮，尺寸留著是為了排版時不用等圖片載入。 */
+export interface EntryPhoto {
+  id: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  createdAt: string;
+}
+
 export interface DayEntry {
   date: IsoDate;
   mood: MoodId | null;
   blocks: EntryBlock[];
   focus: FocusItem[];
+  photos: EntryPhoto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +182,8 @@ export interface SharedJournal {
 export interface DailyState {
   version: number;
   entries: Record<IsoDate, DayEntry>;
+  /** 使用者自己加的心情，內建的九種不存在這裡。 */
+  customMoods: CustomMood[];
   routines: Routine[];
   /** 日期 → 當天已完成的定期事項 id。 */
   checks: Record<IsoDate, string[]>;

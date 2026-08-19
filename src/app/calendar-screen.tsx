@@ -2,15 +2,24 @@
 
 import { useState } from "react";
 
-import { MonthCalendar, MoodLegend } from "@/components/calendar/month-calendar";
+import { CompletionLegend, MonthCalendar } from "@/components/calendar/month-calendar";
+import { ProgressRing } from "@/components/charts/progress-ring";
 import { MoodPicker } from "@/components/entry/mood-picker";
 import { PencilIcon } from "@/components/icons";
 import { RoutineChecklist } from "@/components/routines/routine-checklist";
 import { LinkButton } from "@/components/ui/button";
 import { Chip, EmptyState, TextLink } from "@/components/ui/surfaces";
-import { formatFullDate, formatMonthLabel, startOfMonth, todayIso } from "@/lib/date";
+import {
+  endOfMonth,
+  formatFullDate,
+  formatMonthLabel,
+  isSameMonth,
+  startOfMonth,
+  startOfWeek,
+  todayIso,
+} from "@/lib/date";
 import { routinesDueOn } from "@/lib/routines";
-import { currentStreak, hasContent, monthEntryCount } from "@/lib/stats";
+import { completion, currentStreak, hasContent, monthEntryCount } from "@/lib/stats";
 import { createDayEntry, useDailyStore } from "@/lib/store";
 import type { MoodId } from "@/lib/types";
 
@@ -28,6 +37,11 @@ export function CalendarScreen() {
   const streak = currentStreak(state, today);
   const monthCount = monthEntryCount(state, monthIso);
 
+  const dayRate = completion(state, today, today);
+  const weekRate = completion(state, startOfWeek(today), today);
+  // 月的環跟著使用者正在看的月份走，週與日一律是「現在」。
+  const monthRate = completion(state, startOfMonth(monthIso), endOfMonth(monthIso));
+
   const setMood = (mood: MoodId | null) => {
     const base = todayEntry ?? createDayEntry(today);
     saveEntry({ ...base, mood, updatedAt: new Date().toISOString() });
@@ -40,8 +54,15 @@ export function CalendarScreen() {
           <h1 className="text-2xl font-semibold tracking-tight text-ink">今天</h1>
           {streak > 0 ? <Chip tone="brand">🔥 連續 {streak} 天</Chip> : null}
           {hasContent(todayEntry) ? <Chip tone="accent">已記錄</Chip> : null}
+          <LinkButton href={`/entry/${today}`} className="ml-auto">
+            <PencilIcon className="size-4" />
+            {hasContent(todayEntry) ? "繼續寫今天" : "寫今天的日記"}
+          </LinkButton>
         </div>
-        <p className="text-sm text-ink-muted">{formatFullDate(today)}</p>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="text-sm text-ink-muted">{formatFullDate(today)}</p>
+          <CompletionLegend />
+        </div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start">
@@ -60,8 +81,23 @@ export function CalendarScreen() {
             </p>
             <TextLink href="/insights">查看回顧 →</TextLink>
           </div>
-          <MoodLegend />
-        </div>
+
+          <section className="card px-4 py-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h2 className="text-sm font-semibold text-ink">預定計畫完成度</h2>
+              <p className="text-xs text-ink-subtle">只計算該做的日子，未來的日子不計入</p>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
+              <ProgressRing label="今天" done={dayRate.done} due={dayRate.due} />
+              <ProgressRing label="本週" done={weekRate.done} due={weekRate.due} />
+              <ProgressRing
+                label={isSameMonth(monthIso, today) ? "本月" : formatMonthLabel(monthIso)}
+                done={monthRate.done}
+                due={monthRate.due}
+              />
+          </div>
+        </section>
+      </div>
 
         <div className="space-y-4">
           <section className="card px-4 py-4">

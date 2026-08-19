@@ -3,11 +3,12 @@
 import { useState } from "react";
 
 import { BlockReader } from "@/components/entry/block-reader";
+import { MoodGlyph } from "@/components/entry/mood-picker";
 import { CheckIcon } from "@/components/icons";
 import { cn } from "@/components/ui/cn";
 import { Card, Chip, EmptyState, SectionHeading, TextLink } from "@/components/ui/surfaces";
 import { formatFullDate, formatRelativeDay } from "@/lib/date";
-import { getMood } from "@/lib/moods";
+import { findMood } from "@/lib/moods";
 import { hasContent } from "@/lib/stats";
 import { useDailyStore } from "@/lib/store";
 import { isBlockEmpty } from "@/lib/templates";
@@ -112,7 +113,8 @@ function SharedEntryCard({
   open: boolean;
   onToggle: () => void;
 }) {
-  const mood = getMood(entry.mood);
+  // 對方的自訂心情不會跟著紀錄傳過來，解不到時就只顯示圓點。
+  const mood = findMood(entry.mood);
   const blocks = entry.blocks.filter((block) => !isBlockEmpty(block));
   const relative = formatRelativeDay(entry.date);
   const doneFocus = entry.focus.filter((item) => item.done).length;
@@ -125,8 +127,8 @@ function SharedEntryCard({
         onClick={onToggle}
         className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-surface-muted/50"
       >
-        <span aria-hidden className="w-7 shrink-0 text-center text-2xl">
-          {mood?.emoji ?? "•"}
+        <span aria-hidden className="flex w-7 shrink-0 justify-center text-2xl">
+          {mood ? <MoodGlyph mood={mood} size={26} /> : "•"}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">

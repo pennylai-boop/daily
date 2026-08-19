@@ -13,6 +13,8 @@
 # testing
 /coverage
 /screenshots
+# 人工驗版時的截圖
+/.verify
 
 # next.js
 /.next/

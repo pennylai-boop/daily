@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { CheckIcon, ChevronRightIcon } from "@/components/icons";
+import { RoutineCheckGrid } from "@/components/routines/check-grid";
 import { cn } from "@/components/ui/cn";
 import { describeFrequency } from "@/lib/routines";
 import { getTemplate } from "@/lib/templates";
@@ -21,49 +22,47 @@ export function RoutineChecklist({
   date: IsoDate;
   onToggle: (routineId: string, date: IsoDate) => void;
 }) {
-  return (
-    <ul className="space-y-1.5">
-      {routines.map((routine) => {
-        const checked = checkedIds.includes(routine.id);
+  // 需要書寫的事項不在這裡打勾，改為導到當天的編輯頁填寫內容，所以各佔一列並帶箭頭；
+  // 只打勾的事項沒有下一步，交給 RoutineCheckGrid 並排，這張卡片才不會被拉得很長。
+  const writing = routines.filter((routine) => routine.template);
+  const checkOnly = routines.filter((routine) => !routine.template);
 
-        // 需要書寫的事項不在這裡打勾，改為導到當天的編輯頁填寫內容。
-        return (
-          <li key={routine.id}>
-            {routine.template ? (
-              <Link
-                href={`/entry/${date}`}
-                className={cn(
-                  ROW_BASE,
-                  checked
-                    ? "border-accent/40 bg-accent-tint"
-                    : "border-line bg-surface hover:border-line-strong hover:bg-surface-muted",
-                )}
-              >
-                <StatusDot checked={checked} />
-                <RoutineLabel routine={routine} checked={checked} />
-                <ChevronRightIcon className="size-4 shrink-0 text-ink-subtle" />
-              </Link>
-            ) : (
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={checked}
-                onClick={() => onToggle(routine.id, date)}
-                className={cn(
-                  ROW_BASE,
-                  checked
-                    ? "border-accent/40 bg-accent-tint"
-                    : "border-line bg-surface hover:border-line-strong hover:bg-surface-muted",
-                )}
-              >
-                <StatusDot checked={checked} />
-                <RoutineLabel routine={routine} checked={checked} />
-              </button>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+  return (
+    <div className="space-y-2">
+      {writing.length > 0 ? (
+        <ul className="space-y-1.5">
+          {writing.map((routine) => {
+            const checked = checkedIds.includes(routine.id);
+
+            return (
+              <li key={routine.id}>
+                <Link
+                  href={`/entry/${date}`}
+                  className={cn(
+                    ROW_BASE,
+                    checked
+                      ? "border-accent/40 bg-accent-tint"
+                      : "border-line bg-surface hover:border-line-strong hover:bg-surface-muted",
+                  )}
+                >
+                  <StatusDot checked={checked} />
+                  <RoutineLabel routine={routine} checked={checked} />
+                  <ChevronRightIcon className="size-4 shrink-0 text-ink-subtle" />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      {checkOnly.length > 0 ? (
+        <RoutineCheckGrid
+          routines={checkOnly}
+          checkedIds={checkedIds}
+          onToggle={(routine) => onToggle(routine.id, date)}
+        />
+      ) : null}
+    </div>
   );
 }
 

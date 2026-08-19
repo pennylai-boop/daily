@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { cn } from "./cn";
@@ -112,12 +112,13 @@ export function StatTile({
   unit?: string;
   hint?: string;
 }) {
+  // 手機上會四張並列，每張只剩 80px 左右，所以留白與字級都先縮一號。
   return (
-    <div className="card px-4 py-3.5">
-      <p className="text-[13px] text-ink-muted">{label}</p>
+    <div className="card px-2 py-3 sm:px-4 sm:py-3.5">
+      <p className="text-xs whitespace-nowrap text-ink-muted sm:text-[13px]">{label}</p>
       <p className="mt-1 flex items-baseline gap-1">
-        <span className="text-2xl font-semibold tracking-tight text-ink">{value}</span>
-        {unit ? <span className="text-[13px] text-ink-subtle">{unit}</span> : null}
+        <span className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{value}</span>
+        {unit ? <span className="text-xs text-ink-subtle sm:text-[13px]">{unit}</span> : null}
       </p>
       {hint ? <p className="mt-0.5 text-xs text-ink-subtle">{hint}</p> : null}
     </div>

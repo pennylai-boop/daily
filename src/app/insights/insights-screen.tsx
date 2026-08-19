@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { LineChart } from "@/components/charts/line-chart";
+import { MoodGlyph } from "@/components/entry/mood-picker";
 import { RangeTabs } from "@/components/ui/range-tabs";
 import {
   Card,
@@ -14,7 +15,7 @@ import {
   TextLink,
 } from "@/components/ui/surfaces";
 import { formatFullDate, formatRelativeDay, todayIso } from "@/lib/date";
-import { MOODS } from "@/lib/moods";
+import { findMood, moodOptions } from "@/lib/moods";
 import {
   buildRangeWindow,
   moodSeries,
@@ -33,7 +34,7 @@ import {
 } from "@/lib/stats";
 import { useDailyStore } from "@/lib/store";
 import { getTemplate, isBlockEmpty, summarizeBlock } from "@/lib/templates";
-import type { DayEntry, MoodId } from "@/lib/types";
+import type { CustomMood, DayEntry, MoodId } from "@/lib/types";
 
 export function InsightsScreen() {
   const { state, ready } = useDailyStore();
@@ -93,7 +94,8 @@ export function InsightsScreen() {
     <div className="mx-auto max-w-4xl space-y-6">
       <PageTitle />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* 四張並列，手機也不折成 2×2：這四個數字是一組，一眼掃完比排得漂亮重要。 */}
+      <div className="grid grid-cols-4 gap-2 sm:gap-3">
         <StatTile label="目前連續" value={currentStreak(state, today)} unit="天" />
         <StatTile label="最長連續" value={longestStreak(state)} unit="天" />
         <StatTile label="累積記錄" value={dates.length} unit="天" />
@@ -163,14 +165,15 @@ export function InsightsScreen() {
             <p className="mt-4 text-[13px] text-ink-muted">這段期間還沒有選過心情表情。</p>
           ) : (
             <ul className="mt-4 space-y-2.5">
-              {MOODS.filter((mood) => (moodTally.get(mood.id) ?? 0) > 0)
+              {moodOptions(state.customMoods)
+                .filter((mood) => (moodTally.get(mood.id) ?? 0) > 0)
                 .sort((a, b) => (moodTally.get(b.id) ?? 0) - (moodTally.get(a.id) ?? 0))
                 .map((mood) => {
                   const count = moodTally.get(mood.id) ?? 0;
                   return (
                     <li key={mood.id} className="flex items-center gap-3">
-                      <span aria-hidden className="w-6 text-center text-lg">
-                        {mood.emoji}
+                      <span className="flex w-6 justify-center">
+                        <MoodGlyph mood={mood} size={20} />
                       </span>
                       <span className="w-10 shrink-0 text-[13px] text-ink-muted">{mood.label}</span>
                       <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-muted">
@@ -229,7 +232,7 @@ export function InsightsScreen() {
         <ul className="space-y-2.5">
           {recent.map((date) => (
             <li key={date}>
-              <EntryRow entry={state.entries[date]} />
+              <EntryRow entry={state.entries[date]} customMoods={state.customMoods} />
             </li>
           ))}
         </ul>
@@ -247,8 +250,8 @@ function PageTitle() {
   );
 }
 
-function EntryRow({ entry }: { entry: DayEntry }) {
-  const mood = MOODS.find((item) => item.id === entry.mood);
+function EntryRow({ entry, customMoods }: { entry: DayEntry; customMoods: CustomMood[] }) {
+  const mood = findMood(entry.mood, customMoods);
   const filled = entry.blocks.filter((block) => !isBlockEmpty(block));
   const summary = filled.map(summarizeBlock).join("　") || "（只記錄了心情與目標）";
   const relative = formatRelativeDay(entry.date);
@@ -258,8 +261,8 @@ function EntryRow({ entry }: { entry: DayEntry }) {
       href={`/entry/${entry.date}`}
       className="card flex gap-3.5 px-4 py-3.5 transition-colors hover:border-line-strong hover:bg-surface-muted/50"
     >
-      <span aria-hidden className="mt-0.5 w-7 shrink-0 text-center text-2xl">
-        {mood?.emoji ?? "•"}
+      <span aria-hidden className="mt-0.5 flex w-7 shrink-0 justify-center text-2xl">
+        {mood ? <MoodGlyph mood={mood} size={26} /> : "•"}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">

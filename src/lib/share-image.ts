@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import { formatFullDate } from "./date";
-import { getMood } from "./moods";
+import { findMood, type MoodOption } from "./moods";
+import { blobToDataUrl, hasNativeShare, nativeShare } from "./native-bridge";
 import { getMark, getTemplate, groupMindfulnessItems, isBlockEmpty } from "./templates";
-import type { DayEntry, Routine } from "./types";
+import type { CustomMood, DayEntry, EntryPhoto, Routine } from "./types";
 
 /**
  * 把一天的紀錄畫成一張整頁圖片。
@@ -198,8 +199,7 @@ class PageBuilder {
     this.y += lines.length * Math.round(size * 1.7) + 10;
   }
 
-  header(entry: DayEntry) {
-    const mood = getMood(entry.mood);
+  header(entry: DayEntry, mood: MoodOption | null, moodIcon: HTMLImageElement | null) {
     const y = this.y;
 
     this.commands.push((ctx) => {
@@ -213,15 +213,57 @@ class PageBuilder {
     if (mood) {
       const moodY = this.y;
       this.commands.push((ctx) => {
-        ctx.font = this.font(38);
         ctx.textBaseline = "alphabetic";
-        ctx.fillText(mood.emoji, PADDING, moodY + 38);
+        if (moodIcon) {
+          // 自訂心情上傳的小圖，裁成圓形和介面上的樣子一致。
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(PADDING + 20, moodY + 20, 20, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(moodIcon, PADDING, moodY, 40, 40);
+          ctx.restore();
+        } else {
+          ctx.font = this.font(38);
+          ctx.fillText(mood.emoji ?? "", PADDING, moodY + 38);
+        }
         ctx.font = this.font(28, 500);
         ctx.fillStyle = COLORS.inkMuted;
         ctx.fillText(`今天的心情：${mood.label}`, PADDING + 56, moodY + 34);
       });
       this.y += 58;
     }
+  }
+
+  /** 照片：一張時滿版，多張時兩欄方格。 */
+  photos(items: LoadedPhoto[]) {
+    if (items.length === 0) return;
+    const gap = 20;
+
+    if (items.length === 1) {
+      const { photo, image } = items[0];
+      const ratio = photo.height / photo.width || 1;
+      const height = Math.min(Math.round(CONTENT_WIDTH * ratio), 900);
+      const y = this.y;
+      this.commands.push((ctx) => {
+        drawCover(ctx, image, PADDING, y, CONTENT_WIDTH, height, 20);
+      });
+      this.y += height;
+      return;
+    }
+
+    const cell = Math.round((CONTENT_WIDTH - gap) / 2);
+    const rows = Math.ceil(items.length / 2);
+    const baseY = this.y;
+
+    items.forEach(({ image }, index) => {
+      const x = PADDING + (index % 2) * (cell + gap);
+      const y = baseY + Math.floor(index / 2) * (cell + gap);
+      this.commands.push((ctx) => {
+        drawCover(ctx, image, x, y, cell, cell, 20);
+      });
+    });
+
+    this.y += rows * cell + (rows - 1) * gap;
   }
 
   footer() {
@@ -256,6 +298,46 @@ class PageBuilder {
       ctx.restore();
     }
   }
+}
+
+interface LoadedPhoto {
+  photo: EntryPhoto;
+  image: HTMLImageElement;
+}
+
+/** 等比填滿目標方框並裁掉多餘的部分，避免照片被拉變形。 */
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const scale = Math.max(width / image.width, height / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+
+  ctx.save();
+  roundRect(ctx, x, y, width, height, radius);
+  ctx.clip();
+  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.restore();
+
+  ctx.strokeStyle = COLORS.line;
+  ctx.lineWidth = 1;
+  roundRect(ctx, x + 0.5, y + 0.5, width - 1, height - 1, radius);
+  ctx.stroke();
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("圖片載入失敗"));
+    image.src = src;
+  });
 }
 
 function roundRect(
@@ -323,18 +405,28 @@ function tokenize(line: string): string[] {
   return tokens;
 }
 
-export function buildDayImage(
+export async function buildDayImage(
   entry: DayEntry,
   routines: Routine[],
   checkedIds: string[],
-): HTMLCanvasElement {
+  customMoods: CustomMood[] = [],
+): Promise<HTMLCanvasElement> {
   const measureCanvas = document.createElement("canvas");
   const measureContext = measureCanvas.getContext("2d");
   if (!measureContext) throw new Error("這個瀏覽器不支援 Canvas");
 
+  const mood = findMood(entry.mood, customMoods);
+  // Canvas 只能畫已經載入完成的圖，所以排版前先把心情圖示與照片都解碼好。
+  const [moodIcon, photos] = await Promise.all([
+    mood?.image ? loadImage(mood.image) : Promise.resolve(null),
+    Promise.all(
+      entry.photos.map(async (photo) => ({ photo, image: await loadImage(photo.dataUrl) })),
+    ),
+  ]);
+
   const page = new PageBuilder(measureContext);
   page.space(PADDING);
-  page.header(entry);
+  page.header(entry, mood, moodIcon);
   page.space(12);
 
   if (entry.focus.length > 0) {
@@ -386,6 +478,12 @@ export function buildDayImage(
     page.space(26);
   }
 
+  if (photos.length > 0) {
+    page.sectionTitle("📷", "照片");
+    page.photos(photos);
+    page.space(26);
+  }
+
   page.space(10);
   page.footer();
   page.space(PADDING - 40);
@@ -413,32 +511,44 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-export type ShareResult = "shared" | "downloaded";
+export type ShareResult = "native" | "shared" | "downloaded";
 
 /**
- * 優先用 Web Share API 直接分享檔案（手機上可以選 LINE），
- * 桌機沒有這個 API 時退回下載 PNG。
+ * 三條路徑，依序嘗試：
+ * 1. 原生殼的分享橋接（WebView 沒有 Web Share API，也存不下 blob 連結的下載）
+ * 2. 瀏覽器的 Web Share API（手機上可以直接選 LINE）
+ * 3. 下載 PNG（桌機瀏覽器）
  */
 export async function shareDayImage(
   entry: DayEntry,
   routines: Routine[],
   checkedIds: string[],
+  customMoods: CustomMood[] = [],
 ): Promise<ShareResult> {
-  const blob = await toBlob(buildDayImage(entry, routines, checkedIds));
-  const file = new File([blob], `daily-${entry.date}.png`, { type: "image/png" });
+  const blob = await toBlob(await buildDayImage(entry, routines, checkedIds, customMoods));
+  const fileName = `daily-${entry.date}.png`;
+  const title = `天天 daily｜${formatFullDate(entry.date)}`;
 
-  if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({
-      files: [file],
-      title: `天天 daily｜${formatFullDate(entry.date)}`,
+  if (hasNativeShare()) {
+    const handled = await nativeShare({
+      kind: "image",
+      fileName,
+      title,
+      dataUrl: await blobToDataUrl(blob),
     });
+    if (handled) return "native";
+  }
+
+  const file = new File([blob], fileName, { type: "image/png" });
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({ files: [file], title });
     return "shared";
   }
 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = file.name;
+  anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
   return "downloaded";

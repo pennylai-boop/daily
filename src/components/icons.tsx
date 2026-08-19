@@ -75,6 +75,14 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
+export function HeartIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 20s-7.5-4.4-7.5-9.4A4.1 4.1 0 0 1 12 7.6a4.1 4.1 0 0 1 7.5 3C19.5 15.6 12 20 12 20z" />
+    </Icon>
+  );
+}
+
 export function BellIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -104,6 +112,14 @@ export function ChevronRightIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M9 5l7 7-7 7" />
+    </Icon>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 9l7 7 7-7" />
     </Icon>
   );
 }
@@ -157,6 +173,16 @@ export function ShareIcon(props: IconProps) {
     <Icon {...props}>
       <path d="M12 15V4M8.5 7.5L12 4l3.5 3.5" />
       <path d="M5 13v5.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V13" />
+    </Icon>
+  );
+}
+
+export function InfoIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11.2v5" />
+      <circle cx="12" cy="7.7" r="0.9" fill="currentColor" stroke="none" />
     </Icon>
   );
 }

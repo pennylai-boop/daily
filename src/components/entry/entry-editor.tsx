@@ -1,11 +1,12 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { BlockEditor } from "@/components/entry/block-editor";
 import { FocusList } from "@/components/entry/focus-list";
-import { MoodPicker } from "@/components/entry/mood-picker";
+import { MoodField } from "@/components/entry/mood-picker";
+import { PhotoStrip } from "@/components/entry/photo-strip";
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -13,8 +14,10 @@ import {
   ImageIcon,
   TrashIcon,
 } from "@/components/icons";
+import { RoutineCheckGrid } from "@/components/routines/check-grid";
 import { Button, LinkButton } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
+import { CollapsibleSection } from "@/components/ui/collapsible";
 import { Chip } from "@/components/ui/surfaces";
 import {
   addDays,
@@ -22,15 +25,15 @@ import {
   formatRelativeDay,
   formatShortDate,
   isFuture,
-  todayIso,
 } from "@/lib/date";
+import { DEFAULT_MOOD } from "@/lib/moods";
 import { describeFrequency, routinesDueOn, writableRoutinesNotDue } from "@/lib/routines";
 import { shareDayImage } from "@/lib/share-image";
 import { hasContent } from "@/lib/stats";
 import { createId } from "@/lib/storage";
 import { createDayEntry, useDailyStore } from "@/lib/store";
 import { createEmptyContent, getTemplate, isBlockEmpty } from "@/lib/templates";
-import type { DayEntry, EntryBlock, IsoDate, Routine } from "@/lib/types";
+import { DEFAULT_MOOD_ID, type DayEntry, type EntryBlock, type IsoDate, type Routine } from "@/lib/types";
 
 export function EntryScreen({ date }: { date: IsoDate }) {
   const { state, ready } = useDailyStore();
@@ -48,11 +51,10 @@ export function EntryScreen({ date }: { date: IsoDate }) {
   return <EntryForm key={date} date={date} initial={state.entries[date] ?? createDayEntry(date)} />;
 }
 
-type SaveStatus = "idle" | "saving" | "saved";
+type SaveStatus = "idle" | "saving" | "saved" | "full";
 
 function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
   const { state, saveEntry, deleteEntry, toggleRoutineCheck } = useDailyStore();
-  const today = todayIso();
   const [draft, setDraft] = useState<DayEntry>(initial);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<SaveStatus>("idle");
@@ -69,19 +71,25 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     if (!dirty) return;
     const timer = setTimeout(() => {
       const next = { ...draft, updatedAt: new Date().toISOString() };
+      // 預設心情只在這天真的有內容時才寫進去，單純點開某一天不會留下紀錄。
+      if (!next.mood && hasContent(next)) next.mood = DEFAULT_MOOD_ID;
+
       if (!hasContent(next) && next.blocks.length === 0) {
         deleteEntry(date);
+        setStatus("saved");
       } else {
-        saveEntry(next);
+        setStatus(saveEntry(next) ? "saved" : "full");
       }
       setDirty(false);
-      setStatus("saved");
     }, 600);
     return () => clearTimeout(timer);
   }, [dirty, draft, date, saveEntry, deleteEntry]);
 
   const checkedIds = state.checks[date] ?? [];
   const dueRoutines = routinesDueOn(state.routines, date);
+  // 只打勾的事項並排成格狀，有書寫格式的仍然是一列小方框（打勾後要在下方展開欄位）。
+  const writingRoutines = dueRoutines.filter((routine) => routine.template);
+  const checkOnlyRoutines = dueRoutines.filter((routine) => !routine.template);
   const extraRoutines = writableRoutinesNotDue(state.routines, date);
   const relative = formatRelativeDay(date);
 
@@ -130,7 +138,7 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     setSharing(true);
     setShareMessage(null);
     try {
-      const result = await shareDayImage(draft, state.routines, checkedIds);
+      const result = await shareDayImage(draft, state.routines, checkedIds, state.customMoods);
       if (result === "downloaded") {
         setShareMessage("已下載圖片，可以直接傳到 LINE 或其他地方。");
       }
@@ -165,6 +173,11 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
                 <span className="hidden sm:inline">{formatFullDate(date)}</span>
               </h1>
               {relative ? <Chip tone="brand">{relative}</Chip> : null}
+              <MoodField
+                value={draft.mood}
+                fallback={DEFAULT_MOOD}
+                onChange={(mood) => update({ mood })}
+              />
             </div>
             <SaveIndicator status={status} />
           </div>
@@ -188,44 +201,47 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       </header>
 
       <section className="card px-4 py-4">
-        <h2 className="text-sm font-semibold text-ink">
-          {date === today ? "今天的心情" : "這天的心情"}
-        </h2>
-        <div className="mt-3">
-          <MoodPicker value={draft.mood} onChange={(mood) => update({ mood })} />
-        </div>
-      </section>
-
-      <section className="card px-4 py-4">
         <h2 className="text-sm font-semibold text-ink">當日目標</h2>
         <p className="mt-0.5 mb-3 text-[13px] text-ink-muted">寫下想完成的事，完成後打勾。</p>
         <FocusList items={draft.focus} onChange={(focus) => update({ focus })} />
       </section>
 
-      <section className="space-y-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-          <h2 className="text-sm font-semibold text-ink">定期事項</h2>
+      <CollapsibleSection
+        title="定期事項"
+        meta={
           <span className="text-[13px] tabular-nums text-ink-muted">
             {checkedIds.filter((id) => dueRoutines.some((routine) => routine.id === id)).length}
             {" / "}
             {dueRoutines.length}
           </span>
-        </div>
-
+        }
+      >
         {dueRoutines.length > 0 ? (
-          <ul className="space-y-2.5">
+          <div className="space-y-2.5">
+            {writingRoutines.length > 0 ? (
+              <RoutineChips
+                routines={writingRoutines}
+                checkedIds={checkedIds}
+                onToggle={toggleRoutine}
+              />
+            ) : null}
+            {checkOnlyRoutines.length > 0 ? (
+              <RoutineCheckGrid
+                routines={checkOnlyRoutines}
+                checkedIds={checkedIds}
+                onToggle={toggleRoutine}
+              />
+            ) : null}
             {dueRoutines.map((routine) => (
-              <li key={routine.id}>
-                <RoutineCard
-                  routine={routine}
-                  checked={checkedIds.includes(routine.id)}
-                  block={blockFor(routine)}
-                  onToggle={() => toggleRoutine(routine)}
-                  onBlockChange={setBlock}
-                />
-              </li>
+              <RoutinePanel
+                key={routine.id}
+                routine={routine}
+                block={blockFor(routine)}
+                checked={checkedIds.includes(routine.id)}
+                onBlockChange={setBlock}
+              />
             ))}
-          </ul>
+          </div>
         ) : (
           <div className="card px-4 py-5 text-center">
             <p className="text-[13px] text-ink-muted">
@@ -237,41 +253,38 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
             </p>
           </div>
         )}
-      </section>
+      </CollapsibleSection>
 
       {extraRoutines.length > 0 ? (
-        <section className="space-y-2.5">
-          <div className="px-1">
-            <h2 className="text-sm font-semibold text-ink">其他書寫格式</h2>
-            <p className="mt-0.5 text-[13px] text-ink-muted">
-              這天沒有排定，但你仍然可以臨時寫一段。
-            </p>
-          </div>
-          <ul className="space-y-2.5">
+        <CollapsibleSection
+          title="其他書寫格式"
+          description="這天沒有排定，但你仍然可以臨時寫一段。"
+          defaultOpen={false}
+        >
+          <div className="space-y-2.5">
+            <RoutineChips
+              routines={extraRoutines}
+              checkedIds={checkedIds}
+              onToggle={toggleRoutine}
+            />
             {extraRoutines.map((routine) => (
-              <li key={routine.id}>
-                <RoutineCard
-                  routine={routine}
-                  checked={checkedIds.includes(routine.id)}
-                  block={blockFor(routine)}
-                  onToggle={() => toggleRoutine(routine)}
-                  onBlockChange={setBlock}
-                  muted
-                />
-              </li>
+              <RoutinePanel
+                key={routine.id}
+                routine={routine}
+                block={blockFor(routine)}
+                checked={checkedIds.includes(routine.id)}
+                onBlockChange={setBlock}
+              />
             ))}
-          </ul>
-        </section>
+          </div>
+        </CollapsibleSection>
       ) : null}
 
       {orphanBlocks.length > 0 ? (
-        <section className="space-y-2.5">
-          <div className="px-1">
-            <h2 className="text-sm font-semibold text-ink">其他紀錄</h2>
-            <p className="mt-0.5 text-[13px] text-ink-muted">
-              這些內容原本的定期事項已經被刪除或更換了格式，內容仍然保留。
-            </p>
-          </div>
+        <CollapsibleSection
+          title="其他紀錄"
+          description="這些內容原本的定期事項已經被刪除或更換了格式，內容仍然保留。"
+        >
           {orphanBlocks.map((block) => (
             <BlockEditor
               key={block.id}
@@ -280,8 +293,16 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
               onRemove={() => removeBlock(block.id)}
             />
           ))}
-        </section>
+        </CollapsibleSection>
       ) : null}
+
+      <section className="card px-4 py-4">
+        <h2 className="text-sm font-semibold text-ink">照片</h2>
+        <p className="mt-0.5 mb-3 text-[13px] text-ink-muted">
+          留一張當天的照片，分享成圖片時也會一起帶上。
+        </p>
+        <PhotoStrip photos={draft.photos} onChange={(photos) => update({ photos })} />
+      </section>
 
       {hasContent(draft) ? (
         <footer className="space-y-2 border-t border-line pt-4">
@@ -328,87 +349,105 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
   );
 }
 
-function RoutineCard({
-  routine,
-  checked,
-  block,
+/**
+ * 有書寫格式的事項用的小方框，一列可以並排好幾個、寬度隨名字長度。
+ *
+ * 每個事項各佔一張卡片時，光是「今天要做什麼」就吃掉整個螢幕。這裡不排成固定欄數的格狀：
+ * 打勾後下方會展開對應欄位（`RoutinePanel`），並排會看不出勾了哪一個對應哪一段。
+ * 只打勾的事項則交給 `RoutineCheckGrid` 三欄並排。
+ */
+function RoutineChips({
+  routines,
+  checkedIds,
   onToggle,
+}: {
+  routines: Routine[];
+  checkedIds: string[];
+  onToggle: (routine: Routine) => void;
+}) {
+  return (
+    <ul className="flex flex-wrap gap-2">
+      {routines.map((routine) => {
+        const checked = checkedIds.includes(routine.id);
+        return (
+          <li key={routine.id}>
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={checked}
+              // 頻率與備註移到 tooltip：清單上只留看得懂的名字。
+              title={`${describeFrequency(routine.frequency)}${routine.note ? `・${routine.note}` : ""}`}
+              onClick={() => onToggle(routine)}
+              className={cn(
+                "flex min-h-10 items-center gap-2 rounded-xl border py-1.5 pr-3 pl-2 text-sm transition-colors",
+                checked
+                  ? "border-accent/40 bg-accent-tint font-medium text-accent"
+                  : "border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-muted",
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                  checked
+                    ? "border-accent bg-accent text-on-accent"
+                    : "border-line-strong bg-surface",
+                )}
+              >
+                {checked ? <CheckIcon className="size-3.5" strokeWidth={2.6} /> : null}
+              </span>
+              <span aria-hidden className="text-base">
+                {routine.emoji}
+              </span>
+              <span className="max-w-44 truncate">{routine.title}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** 有書寫格式的事項打勾後展開的欄位；已經寫過內容的話取消打勾也會留著。 */
+function RoutinePanel({
+  routine,
+  block,
+  checked,
   onBlockChange,
-  muted = false,
 }: {
   routine: Routine;
-  checked: boolean;
   block: EntryBlock | undefined;
-  onToggle: () => void;
+  checked: boolean;
   onBlockChange: (next: EntryBlock) => void;
-  muted?: boolean;
 }) {
+  if (!block) return null;
+  if (!checked && isBlockEmpty(block)) return null;
+
   const meta = routine.template ? getTemplate(routine.template) : null;
-  const written = block ? !isBlockEmpty(block) : false;
-  const expanded = Boolean(block) && (checked || written);
 
   return (
-    <div
-      className={cn(
-        "card overflow-hidden transition-colors",
-        checked && "border-accent/40",
-        muted && !checked && "opacity-75",
-      )}
-    >
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={checked}
-        onClick={onToggle}
-        className={cn(
-          "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
-          checked ? "bg-accent-tint/60" : "hover:bg-surface-muted",
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-            checked ? "border-accent bg-accent text-on-accent" : "border-line-strong bg-surface",
-          )}
-        >
-          {checked ? <CheckIcon className="size-3.5" strokeWidth={2.6} /> : null}
-        </span>
+    <section className="card overflow-hidden">
+      <header className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-line bg-surface-muted/50 px-4 py-2.5">
         <span aria-hidden className="text-base">
           {routine.emoji}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "truncate text-sm font-medium",
-                checked ? "text-accent" : "text-ink",
-              )}
-            >
-              {routine.title}
-            </span>
-            {meta ? <Chip>{meta.emoji} {meta.name}</Chip> : null}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-ink-subtle">
-            {describeFrequency(routine.frequency)}
-            {routine.note ? `・${routine.note}` : ""}
-          </span>
-        </span>
-      </button>
-
-      {expanded && block ? (
-        <div className="border-t border-line px-4 py-4">
-          {meta ? (
-            <p className="mb-3 text-[13px] text-ink-muted">{meta.tagline}</p>
-          ) : null}
-          <BlockEditor block={block} onChange={onBlockChange} showHeader={false} />
-        </div>
-      ) : null}
-    </div>
+        <h3 className="text-sm font-semibold text-ink">{routine.title}</h3>
+        {meta ? <span className="text-xs text-ink-subtle">{meta.tagline}</span> : null}
+      </header>
+      <div className="px-4 py-4">
+        <BlockEditor block={block} onChange={onBlockChange} showHeader={false} />
+      </div>
+    </section>
   );
 }
 
 function SaveIndicator({ status }: { status: SaveStatus }) {
+  if (status === "full") {
+    return (
+      <p className="text-xs font-semibold text-alert">裝置儲存空間不足，這次的變更沒有存進去</p>
+    );
+  }
+
   const text = status === "saving" ? "儲存中…" : status === "saved" ? "已自動儲存" : "自動儲存";
   return (
     <p className="flex items-center gap-1.5 text-xs text-ink-subtle">

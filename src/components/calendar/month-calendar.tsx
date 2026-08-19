@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
+import { Fragment } from "react";
 
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,10 @@ import {
   startOfMonth,
   WEEKDAY_LABELS,
 } from "@/lib/date";
-import { getMood } from "@/lib/moods";
+import { MoodGlyph } from "@/components/entry/mood-picker";
+import { findMood } from "@/lib/moods";
 import { routinesDueOn } from "@/lib/routines";
-import { hasContent } from "@/lib/stats";
+import { completion, hasContent } from "@/lib/stats";
 import type { DailyState, IsoDate } from "@/lib/types";
 
 interface MonthCalendarProps {
@@ -28,6 +30,9 @@ interface MonthCalendarProps {
 
 export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCalendarProps) {
   const grid = buildMonthGrid(monthIso);
+  const weeks = Array.from({ length: grid.length / 7 }, (_, index) =>
+    grid.slice(index * 7, index * 7 + 7),
+  );
   const showTodayButton = !isSameMonth(monthIso, today);
 
   return (
@@ -63,7 +68,7 @@ export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCa
         </div>
       </header>
 
-      <div className="grid grid-cols-7 border-b border-line bg-surface-muted/60">
+      <div className={cn(GRID_COLUMNS, "border-b border-line bg-surface-muted/60")}>
         {WEEKDAY_LABELS.map((label, index) => (
           <div
             key={label}
@@ -75,20 +80,51 @@ export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCa
             {label}
           </div>
         ))}
+        <div className="py-2 text-center text-xs font-medium text-ink-subtle" title="整週的完成度">
+          週
+        </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-line p-px">
-        {grid.map((date) => (
-          <DayCell
-            key={date}
-            date={date}
-            monthIso={monthIso}
-            today={today}
-            state={state}
-          />
+      <div className={cn(GRID_COLUMNS, "gap-px bg-line p-px")}>
+        {weeks.map((week) => (
+          <Fragment key={week[0]}>
+            {week.map((date) => (
+              <DayCell key={date} date={date} monthIso={monthIso} today={today} state={state} />
+            ))}
+            <WeekCell week={week} state={state} />
+          </Fragment>
         ))}
       </div>
     </section>
+  );
+}
+
+/** 七天 + 一欄週完成度。週那一欄固定窄寬度，日期格子才不會被壓扁。 */
+const GRID_COLUMNS = "grid grid-cols-[repeat(7,minmax(0,1fr))_2.25rem] sm:grid-cols-[repeat(7,minmax(0,1fr))_3rem]";
+
+function WeekCell({ week, state }: { week: IsoDate[]; state: DailyState }) {
+  const { done, due, rate } = completion(state, week[0], week[week.length - 1]);
+  const percent = Math.round(rate * 100);
+
+  return (
+    <div
+      title={due === 0 ? "這週沒有排定的事項" : `這週定期事項 ${done}/${due}`}
+      className="flex flex-col items-center justify-center gap-1 bg-surface-muted/60 px-0.5"
+    >
+      {due === 0 ? (
+        <span className="text-[11px] text-ink-subtle">—</span>
+      ) : (
+        <>
+          <span className="text-[11px] font-semibold tabular-nums text-ink-muted">{percent}%</span>
+          <span aria-hidden className="h-1 w-6 overflow-hidden rounded-full bg-line-strong/50">
+            <span
+              className="block h-full rounded-full bg-accent"
+              style={{ width: `${percent}%` }}
+            />
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -105,18 +141,25 @@ function DayCell({
 }) {
   const entry = state.entries[date] ?? null;
   const recorded = hasContent(entry);
-  const mood = getMood(entry?.mood);
+  const mood = findMood(entry?.mood, state.customMoods);
   const inMonth = isSameMonth(date, monthIso);
   const isToday = date === today;
   const isFutureDay = date > today;
 
   const due = routinesDueOn(state.routines, date).length;
   const done = due === 0 ? 0 : (state.checks[date] ?? []).length;
+  const percent = due === 0 ? 0 : Math.round((done / due) * 100);
 
   return (
     <Link
       href={`/entry/${date}`}
-      aria-label={`${date}${recorded ? `，心情：${mood?.label ?? "已記錄"}` : "，尚未記錄"}`}
+      aria-label={[
+        date,
+        recorded ? `心情：${mood?.label ?? "已記錄"}` : "尚未記錄",
+        due > 0 ? `定期事項完成 ${percent}%（${done}/${due}）` : null,
+      ]
+        .filter(Boolean)
+        .join("，")}
       className={cn(
         "group relative flex aspect-[5/6] flex-col items-center gap-1 bg-surface px-1 pt-1.5 pb-2",
         "transition-colors sm:aspect-square sm:gap-1.5 sm:pt-2",
@@ -136,15 +179,9 @@ function DayCell({
         {dayOfMonth(date)}
       </span>
 
-      <span className="flex flex-1 items-center justify-center">
+      <span className="flex flex-1 items-center justify-center" title={mood?.label}>
         {mood ? (
-          <span
-            aria-hidden
-            title={mood.label}
-            className="text-xl leading-none sm:text-[26px] lg:text-[28px]"
-          >
-            {mood.emoji}
-          </span>
+          <MoodGlyph mood={mood} size={24} />
         ) : recorded ? (
           <span
             aria-hidden
@@ -157,12 +194,12 @@ function DayCell({
       {due > 0 ? (
         <span
           aria-hidden
-          title={`定期事項 ${done}/${due}`}
+          title={`定期事項 ${percent}%（${done}/${due}）`}
           className="h-1 w-8 overflow-hidden rounded-full bg-line-strong/50 sm:w-10"
         >
           <span
             className="block h-full rounded-full bg-accent transition-[width]"
-            style={{ width: `${(done / due) * 100}%` }}
+            style={{ width: `${percent}%` }}
           />
         </span>
       ) : (
@@ -172,29 +209,15 @@ function DayCell({
   );
 }
 
-export function MoodLegend() {
+/**
+ * 日格子下緣那條細線的圖例。心情表情不需要圖例（右側面板本來就列著全部的心情與名稱），
+ * 所以只留完成度這一條，跟在日期後面就好，不用一張卡片。
+ */
+export function CompletionLegend({ className }: { className?: string }) {
   return (
-    <div className="card px-4 py-3.5">
-      <p className="text-[13px] font-medium text-ink">心情圖樣</p>
-      <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-2">
-        {[
-          { emoji: "😄", label: "燦爛" },
-          { emoji: "😌", label: "平靜" },
-          { emoji: "🥰", label: "感恩" },
-          { emoji: "😪", label: "疲累" },
-          { emoji: "😰", label: "焦慮" },
-          { emoji: "😢", label: "低落" },
-        ].map(({ emoji, label }) => (
-          <li key={label} className="flex items-center gap-1.5 text-xs text-ink-muted">
-            <span aria-hidden>{emoji}</span>
-            {label}
-          </li>
-        ))}
-        <li className="flex items-center gap-1.5 text-xs text-ink-muted">
-          <span aria-hidden className="h-1 w-6 rounded-full bg-accent" />
-          定期事項完成度
-        </li>
-      </ul>
-    </div>
+    <p className={cn("flex items-center gap-1.5 text-xs text-ink-muted", className)}>
+      <span aria-hidden className="h-1 w-6 shrink-0 rounded-full bg-accent" />
+      定期事項完成度
+    </p>
   );
 }

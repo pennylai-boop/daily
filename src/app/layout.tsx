@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
 import { AppShell } from "@/components/app-shell";
+import { ServiceWorkerRegistrar } from "@/components/service-worker";
+import { platformBootstrapScript } from "@/lib/platform";
 import { themeBootstrapScript } from "@/lib/theme";
 
 import "./globals.css";
@@ -38,13 +40,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    // data-theme 由 themeBootstrapScript 在 hydration 前寫入，因此忽略這層的屬性比對。
+    // data-theme 與 data-platform 由下面兩支 script 在 hydration 前寫入，因此忽略這層的屬性比對。
     <html lang="zh-Hant-TW" className="h-full antialiased" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+        <script dangerouslySetInnerHTML={{ __html: platformBootstrapScript }} />
       </head>
       <body className="flex min-h-full flex-col font-sans">
         <AppShell>{children}</AppShell>
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

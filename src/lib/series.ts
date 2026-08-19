@@ -10,7 +10,7 @@ import {
   startOfWeek,
   todayIso,
 } from "./date";
-import { MOODS } from "./moods";
+import { findMood } from "./moods";
 import { isRoutineDueOn } from "./routines";
 import { countWords, TEMPLATES } from "./templates";
 import type { DailyState, IsoDate, Routine } from "./types";
@@ -39,8 +39,6 @@ export interface RangeWindow {
   to: IsoDate;
   buckets: Bucket[];
 }
-
-const MOOD_SCORES = new Map(MOODS.map((mood) => [mood.id, mood.score]));
 
 /** 依照區間長度決定 `全部` 的起點：最早一筆紀錄，沒有資料時退回一個月。 */
 function earliestDate(state: DailyState): IsoDate | null {
@@ -153,6 +151,32 @@ export function writingSeries(state: DailyState, buckets: Bucket[]): ChartSeries
   }));
 }
 
+/** 單一事項每個區間的書寫字數；只打勾的事項沒有內容，值一律是 0。 */
+export function routineWordSeries(
+  state: DailyState,
+  buckets: Bucket[],
+  routine: Routine,
+): ChartSeries[] {
+  const today = todayIso();
+
+  return [
+    {
+      id: `${routine.id}-words`,
+      label: "書寫字數",
+      color: SERIES_COLORS[1],
+      values: buckets.map((bucket) => {
+        let total = 0;
+        for (const day of eachDay(bucket, today)) {
+          for (const block of state.entries[day]?.blocks ?? []) {
+            if (block.routineId === routine.id) total += countWords(block);
+          }
+        }
+        return total;
+      }),
+    },
+  ];
+}
+
 /** 心情平均分數（1–5），沒有選心情的區間為 null。 */
 export function moodSeries(state: DailyState, buckets: Bucket[]): ChartSeries[] {
   const today = todayIso();
@@ -165,9 +189,8 @@ export function moodSeries(state: DailyState, buckets: Bucket[]): ChartSeries[] 
       values: buckets.map((bucket) => {
         const scores: number[] = [];
         for (const day of eachDay(bucket, today)) {
-          const mood = state.entries[day]?.mood;
-          const score = mood ? MOOD_SCORES.get(mood) : undefined;
-          if (score !== undefined) scores.push(score);
+          const mood = findMood(state.entries[day]?.mood, state.customMoods);
+          if (mood) scores.push(mood.score);
         }
         if (scores.length === 0) return null;
         return scores.reduce((sum, score) => sum + score, 0) / scores.length;

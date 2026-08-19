@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { PencilIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { RoutineForm } from "@/components/routines/routine-form";
-import { Button, LinkButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Card, Chip, EmptyState } from "@/components/ui/surfaces";
 import { addDays, todayIso } from "@/lib/date";
 import { describeFrequency, isRoutineDueOn } from "@/lib/routines";
@@ -38,16 +40,14 @@ export function RoutinesScreen() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">定期事項</h1>
-          <p className="text-sm text-ink-muted">
-            設定重複的頻率，天天會在該做的日子排進當天清單。想書寫的事項再選一種記錄格式，
-            例如五感恩或觀心書。
-          </p>
-        </div>
+      <header className="flex items-center gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">定期事項</h1>
+        <InfoHint label="定期事項是什麼">
+          設定重複的頻率，天天會在該做的日子排進當天清單。想書寫的事項再選一種記錄格式，
+          例如五感恩或觀心書。點一列可以看它的完成統計。
+        </InfoHint>
         {mode.kind === "closed" ? (
-          <Button className="w-full sm:w-auto" onClick={() => setMode({ kind: "create" })}>
+          <Button className="ml-auto" onClick={() => setMode({ kind: "create" })}>
             <PlusIcon className="size-4" />
             新增事項
           </Button>
@@ -115,7 +115,6 @@ export function RoutinesScreen() {
                   routine={routine}
                   dueToday={isRoutineDueOn(routine, today)}
                   doneToday={(state.checks[today] ?? []).includes(routine.id)}
-                  writeHref={routine.template ? `/entry/${today}` : null}
                   rate={stats && stats.due > 0 ? stats.rate : null}
                   onEdit={() => setMode({ kind: "edit", id: routine.id })}
                   onArchive={() => updateRoutine(routine.id, { archived: true })}
@@ -175,7 +174,6 @@ function RoutineRow({
   dueToday,
   doneToday,
   rate,
-  writeHref,
   onEdit,
   onArchive,
   onDelete,
@@ -184,8 +182,6 @@ function RoutineRow({
   dueToday: boolean;
   doneToday: boolean;
   rate: number | null;
-  /** 有記錄格式的事項才有內容可寫，null 代表只需要打勾。 */
-  writeHref: string | null;
   onEdit: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -205,45 +201,46 @@ function RoutineRow({
       </div>
     );
 
+  // relative z-10：整張卡片是連往統計頁的連結（下方的 overlay），按鈕要疊在它上面才點得到。
   const actions = (
-    <div className="flex shrink-0 items-center gap-1">
-      {writeHref ? (
-        <LinkButton
-          href={writeHref}
-          size="sm"
-          variant="secondary"
-          className="h-9 sm:h-8"
-          aria-label={`填寫今天的${routine.title}`}
-        >
-          填寫
-        </LinkButton>
-      ) : null}
+    <div className="relative z-10 flex shrink-0 items-center gap-1">
       <Button
         size="sm"
         variant="ghost"
-        aria-label="編輯事項設定"
-        className="size-9 px-0 sm:size-8"
+        aria-label={`編輯「${routine.title}」的設定`}
+        className="size-10 px-0 sm:size-9"
         onClick={onEdit}
       >
-        <PencilIcon className="size-4" />
+        <PencilIcon className="size-5" />
       </Button>
-      <Button size="sm" variant="ghost" className="h-9 sm:h-8" onClick={onArchive}>
+      <Button size="sm" variant="ghost" className="h-10 sm:h-9" onClick={onArchive}>
         封存
       </Button>
       <Button
         size="sm"
         variant="ghost"
-        aria-label="刪除"
-        className="size-9 px-0 text-alert sm:size-8"
+        aria-label={`刪除「${routine.title}」`}
+        className="size-10 px-0 text-alert sm:size-9"
         onClick={onDelete}
       >
-        <TrashIcon className="size-4" />
+        <TrashIcon className="size-5" />
       </Button>
     </div>
   );
 
   return (
-    <div className="card px-4 py-3.5">
+    <div className="card group relative px-4 py-3.5 transition-colors hover:border-line-strong">
+      {/*
+        整張卡片點下去進統計頁。用覆蓋整塊的連結而不是把整張卡包成 <a>：
+        卡片裡有編輯／封存／刪除按鈕，連結裡不能再放按鈕。
+      */}
+      <Link
+        href={`/routines/${routine.id}`}
+        className="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      >
+        <span className="sr-only">查看「{routine.title}」的統計</span>
+      </Link>
+
       <div className="flex items-start gap-3">
         <span
           aria-hidden
@@ -253,8 +250,11 @@ function RoutineRow({
         </span>
 
         <div className="min-w-0 flex-1">
+          {/* 頻率與備註和標題同一列：只有「每天」兩個字的話，多佔一整行很浪費。 */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3 className="text-[15px] font-semibold text-ink">{routine.title}</h3>
+            <h3 className="text-[15px] font-semibold text-ink group-hover:text-brand-strong">
+              {routine.title}
+            </h3>
             {routine.template ? (
               <Chip>
                 {getTemplate(routine.template).emoji} {getTemplate(routine.template).name}
@@ -265,11 +265,11 @@ function RoutineRow({
                 {doneToday ? "今天已完成" : "今天要做"}
               </Chip>
             ) : null}
+            <span className="text-[13px] text-ink-muted">
+              {describeFrequency(routine.frequency)}
+              {routine.note ? `・${routine.note}` : ""}
+            </span>
           </div>
-          <p className="mt-0.5 text-[13px] text-ink-muted">
-            {describeFrequency(routine.frequency)}
-            {routine.note ? `・${routine.note}` : ""}
-          </p>
         </div>
 
         {/* 桌機：完成率與操作按鈕跟在同一行。 */}
