@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * 色票依 docs/UI_design_system.md：只用黑、白、灰、橘 #e86e2c、藍 #262f8b。
+ * 橘色是主色（CTA、導覽啟用），藍色是次色（連結、選中、完成狀態），
+ * 灰階負責背景與文字層級；警示同樣走灰階，不使用紅色。
+ */
+:root {
+  --paper: #f3f4f6;
+  --paper-tint: #e5e7eb;
+  --surface: #ffffff;
+  --surface-muted: #f9fafb;
+  --line: #e5e7eb;
+  --line-strong: #d1d5db;
+  --ink: #111827;
+  --ink-muted: #4b5563;
+  --ink-subtle: #9ca3af;
+  --brand: #e86e2c;
+  --brand-strong: #d95a1a;
+  --brand-tint: #fde8dd;
+  --accent: #262f8b;
+  --accent-strong: #202872;
+  --accent-tint: #eef0f5;
+  /* 填色按鈕／導覽啟用態上的文字色，深色模式會翻成深字以維持對比。 */
+  --on-brand: #ffffff;
+  --on-accent: #ffffff;
+  --alert: #374151;
+  --ring: rgba(38, 47, 139, 0.2);
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.06);
+}
+
+/* 深色模式沿用同一組橘藍，只把灰階換成深色並提亮強調色以維持對比。 */
+[data-theme="dark"] {
+  --paper: #0f1115;
+  --paper-tint: #171a20;
+  --surface: #181b21;
+  --surface-muted: #21252d;
+  --line: #2b303a;
+  --line-strong: #3c434f;
+  --ink: #f3f4f6;
+  --ink-muted: #b3bac6;
+  --ink-subtle: #8a91a0;
+  --brand: #ed8a5c;
+  --brand-strong: #f5b399;
+  --brand-tint: #38251a;
+  --accent: #8a96b8;
+  --accent-strong: #b9c0d4;
+  --accent-tint: #1e2434;
+  --on-brand: #1a1108;
+  --on-accent: #10131c;
+  --alert: #9ca3af;
+  --ring: rgba(138, 150, 184, 0.35);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-tint: var(--paper-tint);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-tint: var(--brand-tint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-tint: var(--accent-tint);
+  --color-on-brand: var(--on-brand);
+  --color-on-accent: var(--on-accent);
+  --color-alert: var(--alert);
+
+  /* 以系統內建的繁中字型為主，避免載入數 MB 的 CJK 網頁字型。 */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang TC", "Hiragino Sans TC",
+    "Noto Sans TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+  --shadow-card: var(--shadow-card);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* 手機上避免橫向捲動與點擊時的灰色閃光。 */
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background-color: var(--brand-tint);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@layer utilities {
+  /* 設計系統的內容容器：白底、gray-200 邊框、rounded-xl、shadow-sm。 */
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* 中文長文行距與字距的閱讀優化。 */
+  .prose-zh {
+    line-height: 1.9;
+    letter-spacing: 0.01em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
