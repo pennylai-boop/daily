@@ -5,7 +5,10 @@
  * 開票時機固定在 PAYUNi 回報付款成功之後，避免沒收到錢就先開票。
  */
 
-import { SPONSOR_PRODUCT_NAME, type InvoiceKind } from "@/lib/support";
+import { SPONSOR_PRODUCT_NAME } from "@/lib/support";
+
+/** 舊版開票種類；贊助流程已改為不開發票，此模組目前未被呼叫。 */
+type InvoiceKind = "cloud" | "mobile" | "donate" | "company";
 
 const ENDPOINT = {
   test: "https://ssl.smse.com.tw/api_test/SPEinvoice_Storage.asp",

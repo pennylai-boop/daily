@@ -1,16 +1,16 @@
 /**
  * 贊助訂單暫存。
  *
- * 開票需要「發票要開給誰」，但這份資料不能交給瀏覽器保管（否則有人改金額或載具），
+ * 感謝信需要贊助者信箱，但這份資料不能交給瀏覽器保管（否則有人改金額），
  * PAYUNi 的回傳也只帶訂單編號，因此建立訂單時先把表單內容留在伺服器端，
- * 等 Notify 回來再依 MerTradeNo 取出開票。
+ * 等 Notify 回來再依 MerTradeNo 取出寄信。
  *
  * 目前是行程內的 Map：單一實例可用，重啟或 Cloud Run 擴出第二個實例就會查不到訂單
- * （後果是發票沒開，款項仍在 PAYUNi 後台看得到，可手動補開）。接上 Supabase 後
+ * （後果是感謝信沒寄，款項仍在 PAYUNi 後台看得到）。接上 Supabase 後
  * 只要換掉這個檔案的實作，其他呼叫端不用動。
  */
 
-import type { InvoiceKind, SponsorInput, SponsorMethod } from "@/lib/support";
+import type { SponsorInput, SponsorMethod } from "@/lib/support";
 
 export interface SponsorOrder {
   merTradeNo: string;
@@ -19,17 +19,12 @@ export interface SponsorOrder {
   name: string;
   email: string;
   message: string;
-  invoiceKind: InvoiceKind;
-  carrierId: string;
-  loveCode: string;
-  taxId: string;
-  companyName: string;
   createdAt: number;
   status: "pending" | "awaiting_payment" | "paid" | "failed";
   tradeNo?: string;
   paidAt?: number;
-  invoiceNumber?: string;
-  invoiceError?: string;
+  thankYouSentAt?: number;
+  thankYouError?: string;
 }
 
 /** dev 模式的熱更新會重新載入模組，掛在 globalThis 才不會把待付款訂單弄丟。 */
@@ -50,11 +45,6 @@ export function createOrder(merTradeNo: string, input: SponsorInput): SponsorOrd
     name: input.name.trim(),
     email: input.email.trim(),
     message: input.message.trim(),
-    invoiceKind: input.invoiceKind,
-    carrierId: input.carrierId.trim().toUpperCase(),
-    loveCode: input.loveCode.trim(),
-    taxId: input.taxId.trim(),
-    companyName: input.companyName.trim(),
     createdAt: Date.now(),
     status: "pending",
   };

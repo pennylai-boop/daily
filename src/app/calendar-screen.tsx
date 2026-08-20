@@ -5,22 +5,24 @@ import { useState } from "react";
 import { CompletionLegend, MonthCalendar } from "@/components/calendar/month-calendar";
 import { ProgressRing } from "@/components/charts/progress-ring";
 import { MoodPicker } from "@/components/entry/mood-picker";
-import { PencilIcon } from "@/components/icons";
+import { CheckIcon, PencilIcon } from "@/components/icons";
 import { RoutineChecklist } from "@/components/routines/routine-checklist";
 import { LinkButton } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Chip, EmptyState, TextLink } from "@/components/ui/surfaces";
 import {
   endOfMonth,
   formatFullDate,
   formatMonthLabel,
   isSameMonth,
+  monthKey,
   startOfMonth,
   startOfWeek,
   todayIso,
 } from "@/lib/date";
 import { routinesDueOn } from "@/lib/routines";
 import { completion, currentStreak, hasContent, monthEntryCount } from "@/lib/stats";
-import { createDayEntry, useDailyStore } from "@/lib/store";
+import { createDayEntry, setMonthGoals, setWeekGoals, useDailyStore } from "@/lib/store";
 import type { MoodId } from "@/lib/types";
 
 export function CalendarScreen() {
@@ -42,9 +44,25 @@ export function CalendarScreen() {
   // 月的環跟著使用者正在看的月份走，週與日一律是「現在」。
   const monthRate = completion(state, startOfMonth(monthIso), endOfMonth(monthIso));
 
+  const weekStart = startOfWeek(today);
+  const weekGoals = state.weekGoals[weekStart] ?? [];
+  const monthGoals = state.monthGoals[monthKey(today)] ?? [];
+  const doneWeek = weekGoals.filter((item) => item.done);
+  const doneMonth = monthGoals.filter((item) => item.done);
+  const doneFocus = (todayEntry?.focus ?? []).filter((item) => item.done);
+  const hasCompletedGoals = doneWeek.length > 0 || doneMonth.length > 0 || doneFocus.length > 0;
+
   const setMood = (mood: MoodId | null) => {
     const base = todayEntry ?? createDayEntry(today);
     saveEntry({ ...base, mood, updatedAt: new Date().toISOString() });
+  };
+
+  const toggleFocusDone = (id: string) => {
+    const base = todayEntry ?? createDayEntry(today);
+    const focus = base.focus.map((item) =>
+      item.id === id ? { ...item, done: !item.done } : item,
+    );
+    saveEntry({ ...base, focus, updatedAt: new Date().toISOString() });
   };
 
   return (
@@ -84,8 +102,12 @@ export function CalendarScreen() {
 
           <section className="card px-4 py-4">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h2 className="text-sm font-semibold text-ink">預定計畫完成度</h2>
-              <p className="text-xs text-ink-subtle">只計算該做的日子，未來的日子不計入</p>
+              <div className="flex items-center gap-1">
+                <h2 className="text-sm font-semibold text-ink">預定計畫完成度</h2>
+                <InfoHint label="預定計畫完成度的說明">
+                  只計算該做的日子，未來的日子不計入。
+                </InfoHint>
+              </div>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
               <ProgressRing label="今天" done={dayRate.done} due={dayRate.due} />
@@ -95,16 +117,16 @@ export function CalendarScreen() {
                 done={monthRate.done}
                 due={monthRate.due}
               />
-          </div>
-        </section>
-      </div>
+            </div>
+          </section>
+        </div>
 
         <div className="space-y-4">
           <section className="card px-4 py-4">
-            <h2 className="text-sm font-semibold text-ink">今天的心情</h2>
-            <p className="mt-0.5 text-[13px] text-ink-muted">
-              選一個表情，它會出現在日曆上。
-            </p>
+            <div className="flex items-center gap-1">
+              <h2 className="text-sm font-semibold text-ink">今天的心情</h2>
+              <InfoHint label="今天的心情的說明">選一個表情，它會出現在日曆上。</InfoHint>
+            </div>
             <div className="mt-3">
               <MoodPicker value={todayEntry?.mood ?? null} onChange={setMood} size="sm" />
             </div>
@@ -116,7 +138,7 @@ export function CalendarScreen() {
 
           <section className="card overflow-hidden">
             <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-              <h2 className="text-sm font-semibold text-ink">今日定期事項</h2>
+              <h2 className="text-sm font-semibold text-ink">今日定期目標</h2>
               {dueToday.length > 0 ? (
                 <span className="text-[13px] tabular-nums text-ink-muted">
                   {checkedToday.filter((id) => dueToday.some((routine) => routine.id === id)).length}
@@ -137,15 +159,92 @@ export function CalendarScreen() {
             ) : (
               <EmptyState
                 emoji="🌱"
-                title="今天沒有排定的事項"
-                description="建立定期事項後，天天會在該做的日子提醒你。"
-                action={<TextLink href="/routines">設定定期事項 →</TextLink>}
+                title="今天沒有排定的目標"
+                description="建立定期目標後，天天會在該做的日子提醒你。"
+                action={<TextLink href="/routines">設定定期目標 →</TextLink>}
               />
             )}
           </section>
+
+          {hasCompletedGoals ? (
+            <section className="card overflow-hidden">
+              <header className="border-b border-line px-4 py-3">
+                <h2 className="text-sm font-semibold text-ink">已完成的目標</h2>
+              </header>
+              <ul className="divide-y divide-line px-4 py-1">
+                {doneFocus.map((item) => (
+                  <CompletedGoalRow
+                    key={`focus-${item.id}`}
+                    label={item.text}
+                    badge="今日目標"
+                    onToggle={() => toggleFocusDone(item.id)}
+                  />
+                ))}
+                {doneWeek.map((item) => (
+                  <CompletedGoalRow
+                    key={`week-${item.id}`}
+                    label={item.text}
+                    badge="本週"
+                    onToggle={() =>
+                      setWeekGoals(
+                        weekStart,
+                        weekGoals.map((current) =>
+                          current.id === item.id ? { ...current, done: false } : current,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+                {doneMonth.map((item) => (
+                  <CompletedGoalRow
+                    key={`month-${item.id}`}
+                    label={item.text}
+                    badge="本月"
+                    onToggle={() =>
+                      setMonthGoals(
+                        monthKey(today),
+                        monthGoals.map((current) =>
+                          current.id === item.id ? { ...current, done: false } : current,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+function CompletedGoalRow({
+  label,
+  badge,
+  onToggle,
+}: {
+  label: string;
+  badge: string;
+  onToggle: () => void;
+}) {
+  return (
+    <li className="flex items-center gap-2.5 py-2.5">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked
+        aria-label={`取消完成：${label}`}
+        onClick={onToggle}
+        className="flex size-[18px] shrink-0 items-center justify-center rounded border border-accent bg-accent text-on-accent"
+      >
+        <CheckIcon className="size-3" strokeWidth={2.6} />
+      </button>
+      <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink-subtle line-through">
+        {label}
+      </span>
+      <span className="shrink-0 text-[11px] text-ink-subtle">{badge}</span>
+    </li>
   );
 }
 

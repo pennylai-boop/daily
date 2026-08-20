@@ -1,6 +1,9 @@
-﻿import Link from "next/link";
+"use client";
+
+import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { InfoHint } from "./info-hint";
 import { cn } from "./cn";
 
 /** 純文字的導向連結。手機上撐開高度，才有足夠的觸控範圍。 */
@@ -30,23 +33,48 @@ export function Card({ className, children }: { className?: string; children: Re
   return <section className={cn("card", className)}>{children}</section>;
 }
 
+/**
+ * 區塊標題。說明文字收進旁邊的小 i，版面只留標題本身。
+ * `description` 可以是字串或節點（回顧頁會依區間動態組句）。
+ */
 export function SectionHeading({
   title,
   description,
   action,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <div className="space-y-1">
+      <div className="flex min-w-0 items-center gap-1">
         <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
-        {description ? <p className="text-[13px] text-ink-muted">{description}</p> : null}
+        {description ? <InfoHint label={`${title}的說明`}>{description}</InfoHint> : null}
       </div>
       {action}
     </div>
+  );
+}
+
+/** 頁面大標，說明同樣收進小 i。 */
+export function PageHeading({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-center gap-x-2 gap-y-2">
+      <div className="flex min-w-0 items-center gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1>
+        {description ? <InfoHint label={`${title}的說明`}>{description}</InfoHint> : null}
+      </div>
+      {action ? <div className="ml-auto shrink-0">{action}</div> : null}
+    </header>
   );
 }
 

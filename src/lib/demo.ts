@@ -244,6 +244,9 @@ export function buildDemoState(): DailyState {
     customMoods: [],
     routines,
     checks,
+    weekGoals: {},
+    monthGoals: {},
+    focusQueue: [],
     settings: buildDemoSettings(),
     sharedWithMe: buildDemoSharedJournals(),
   };
@@ -252,7 +255,12 @@ export function buildDemoState(): DailyState {
 function buildDemoSettings(): AppSettings {
   const now = new Date().toISOString();
   return {
-    profile: { name: "小葉", lineUserId: "Ud41f2a9c7b0e5163" },
+    profile: {
+      name: "小葉",
+      lineUserId: "Ud41f2a9c7b0e5163",
+      // 示範用頭貼（公開示意圖）；正式 LINE 登入會換成 pictureUrl。
+      avatarUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=daily-yeh",
+    },
     line: {
       enabled: true,
       groupName: "家人群",
@@ -294,6 +302,7 @@ function buildDemoSettings(): AppSettings {
         acceptedAt: null,
       },
     ],
+    pepTalk: { visible: true, quotes: null },
   };
 }
 

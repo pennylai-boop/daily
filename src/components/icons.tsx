@@ -75,9 +75,10 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
-export function HeartIcon(props: IconProps) {
+/** 橘色實心愛心；填色與描邊都跟 `currentColor`。 */
+export function HeartIcon({ strokeWidth = 1.6, ...props }: IconProps) {
   return (
-    <Icon {...props}>
+    <Icon fill="currentColor" stroke="currentColor" strokeWidth={strokeWidth} {...props}>
       <path d="M12 20s-7.5-4.4-7.5-9.4A4.1 4.1 0 0 1 12 7.6a4.1 4.1 0 0 1 7.5 3C19.5 15.6 12 20 12 20z" />
     </Icon>
   );
@@ -100,10 +101,35 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function PauseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 5v14M16 5v14" />
+    </Icon>
+  );
+}
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 5v14l11-7z" />
+    </Icon>
+  );
+}
+
+export function SkipForwardIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 5l10 7-10 7V5z" />
+      <path d="M19 5v14" />
+    </Icon>
+  );
+}
+
 export function ChevronLeftIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M15 5l-7 7 7 7" />
+      <path d="M16.5 3.5 7 12l9.5 8.5" />
     </Icon>
   );
 }
@@ -111,7 +137,7 @@ export function ChevronLeftIcon(props: IconProps) {
 export function ChevronRightIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M9 5l7 7-7 7" />
+      <path d="M7.5 3.5 17 12l-9.5 8.5" />
     </Icon>
   );
 }

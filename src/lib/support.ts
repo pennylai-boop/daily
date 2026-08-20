@@ -4,11 +4,10 @@
  * 這一層同時被瀏覽器的表單與 Route Handler 引用，所以不能碰到任何金鑰或 node 模組：
  * 前端用它做即時驗證，後端再用同一份規則擋掉繞過前端的請求。
  *
- * 金流走 PAYUNi（統一金流）、發票走 SmilePay（速買配），兩者的憑證完全獨立，
- * 見 docs/PAYUNi_API_金流物流串接資料.md 與 docs/smilepay-api.md。
+ * 金流走 PAYUNi（統一金流）。不開發票；付款成功後依信箱寄感謝信。
  */
 
-/** 發票與 PAYUNi 商品說明都用這個名稱，帳務上看得出是贊助而不是商品銷售。 */
+/** PAYUNi 商品說明用這個名稱，帳務上看得出是贊助而不是商品銷售。 */
 export const SPONSOR_PRODUCT_NAME = "贊助天天 daily";
 
 /**
@@ -48,29 +47,14 @@ export function getMethod(id: SponsorMethod) {
 /** 快選金額。金額本身可以自己填，這裡只是省下打字。 */
 export const PRESET_AMOUNTS = [100, 300, 500, 1000] as const;
 
-export const INVOICE_KINDS = [
-  { id: "cloud", label: "雲端發票", hint: "發票寄到你的信箱，不印紙本。" },
-  { id: "mobile", label: "手機條碼", hint: "存到手機條碼載具，中獎會自動通知。" },
-  { id: "donate", label: "捐贈", hint: "把發票捐給社福團體，需要愛心碼。" },
-  { id: "company", label: "公司統編", hint: "開立三聯式發票，需要統編與公司名稱。" },
-] as const;
-
-export type InvoiceKind = (typeof INVOICE_KINDS)[number]["id"];
-
 export interface SponsorInput {
   amount: number;
   method: SponsorMethod;
   /** 顯示用的稱呼，留空視為匿名。 */
   name: string;
+  /** 必填：付款成功後寄感謝信用。 */
   email: string;
   message: string;
-  invoiceKind: InvoiceKind;
-  /** 手機條碼載具，格式 /XXXXXXX。 */
-  carrierId: string;
-  /** 捐贈碼（愛心碼）。 */
-  loveCode: string;
-  taxId: string;
-  companyName: string;
 }
 
 export function createSponsorInput(): SponsorInput {
@@ -80,11 +64,6 @@ export function createSponsorInput(): SponsorInput {
     name: "",
     email: "",
     message: "",
-    invoiceKind: "cloud",
-    carrierId: "",
-    loveCode: "",
-    taxId: "",
-    companyName: "",
   };
 }
 
@@ -92,10 +71,6 @@ export type SponsorField = keyof SponsorInput;
 export type SponsorErrors = Partial<Record<SponsorField, string>>;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-/** 財政部的手機條碼：斜線加 7 碼，字元只有大寫英數與 .+- */
-const CARRIER_PATTERN = /^\/[0-9A-Z.+-]{7}$/;
-const LOVE_CODE_PATTERN = /^\d{3,7}$/;
-const TAX_ID_PATTERN = /^\d{8}$/;
 
 /** 前後端共用的驗證。回傳空物件代表可以送出。 */
 export function validateSponsor(input: SponsorInput): SponsorErrors {
@@ -108,26 +83,11 @@ export function validateSponsor(input: SponsorInput): SponsorErrors {
     errors.amount = `${method.label}可接受的金額是 ${method.min.toLocaleString("zh-TW")}～${method.max.toLocaleString("zh-TW")} 元。`;
   }
 
-  // 雲端發票沒有實體載具，只能靠信箱把發票寄給贊助者。
-  const emailRequired = input.invoiceKind === "cloud";
   const email = input.email.trim();
-  if (emailRequired && email.length === 0) {
-    errors.email = "雲端發票需要信箱才能寄出。";
-  } else if (email.length > 0 && !EMAIL_PATTERN.test(email)) {
+  if (email.length === 0) {
+    errors.email = "請填寫信箱，付款成功後會寄感謝信給你。";
+  } else if (!EMAIL_PATTERN.test(email)) {
     errors.email = "信箱格式看起來不對。";
-  }
-
-  if (input.invoiceKind === "mobile" && !CARRIER_PATTERN.test(input.carrierId.trim().toUpperCase())) {
-    errors.carrierId = "手機條碼是斜線加 7 位大寫英數，例如 /ABC1234。";
-  }
-
-  if (input.invoiceKind === "donate" && !LOVE_CODE_PATTERN.test(input.loveCode.trim())) {
-    errors.loveCode = "愛心碼是 3～7 位數字。";
-  }
-
-  if (input.invoiceKind === "company") {
-    if (!TAX_ID_PATTERN.test(input.taxId.trim())) errors.taxId = "統一編號是 8 位數字。";
-    if (input.companyName.trim().length === 0) errors.companyName = "請填寫發票要開立的公司名稱。";
   }
 
   if (input.name.trim().length > 20) errors.name = "稱呼請在 20 個字以內。";

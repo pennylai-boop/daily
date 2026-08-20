@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { Fragment } from "react";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import {
@@ -12,14 +12,17 @@ import {
   dayOfMonth,
   formatMonthLabel,
   isSameMonth,
+  monthKey,
   startOfMonth,
-  WEEKDAY_LABELS,
+  startOfWeek,
+  CALENDAR_WEEKDAY_LABELS,
 } from "@/lib/date";
 import { MoodGlyph } from "@/components/entry/mood-picker";
 import { findMood } from "@/lib/moods";
 import { routinesDueOn } from "@/lib/routines";
 import { completion, hasContent } from "@/lib/stats";
-import type { DailyState, IsoDate } from "@/lib/types";
+import { setMonthGoals, setWeekGoals } from "@/lib/store";
+import type { DailyState, FocusItem, IsoDate } from "@/lib/types";
 
 interface MonthCalendarProps {
   monthIso: IsoDate;
@@ -35,8 +38,37 @@ export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCa
   );
   const showTodayButton = !isSameMonth(monthIso, today);
 
+  const weekStart = startOfWeek(today);
+  const weekItems = state.weekGoals[weekStart] ?? [];
+  const monthItems = state.monthGoals[monthKey(today)] ?? [];
+  const showPeriodGoals = weekItems.length > 0 || monthItems.length > 0;
+
   return (
     <section className="card overflow-hidden">
+      {showPeriodGoals ? (
+        <div
+          className={cn(
+            "grid gap-4 border-b border-line px-4 py-3 sm:px-5",
+            weekItems.length > 0 && monthItems.length > 0 && "grid-cols-2",
+          )}
+        >
+          {monthItems.length > 0 ? (
+            <PeriodGoalBlock
+              title="本月目標"
+              items={monthItems}
+              onChange={(next) => setMonthGoals(monthKey(today), next)}
+            />
+          ) : null}
+          {weekItems.length > 0 ? (
+            <PeriodGoalBlock
+              title="本週目標"
+              items={weekItems}
+              onChange={(next) => setWeekGoals(weekStart, next)}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3.5 sm:px-5">
         <h2 className="text-[17px] font-semibold tracking-tight text-ink">
           {formatMonthLabel(monthIso)}
@@ -51,30 +83,30 @@ export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCa
             size="sm"
             variant="ghost"
             aria-label="上一個月"
-            className="size-10 px-0 sm:size-8"
+            className="size-8 shrink-0 border border-line-strong p-0"
             onClick={() => onMonthChange(addMonths(monthIso, -1))}
           >
-            <ChevronLeftIcon className="size-5 sm:size-4" />
+            <ChevronLeftIcon className="size-7" strokeWidth={2.4} />
           </Button>
           <Button
             size="sm"
             variant="ghost"
             aria-label="下一個月"
-            className="size-10 px-0 sm:size-8"
+            className="size-8 shrink-0 border border-line-strong p-0"
             onClick={() => onMonthChange(addMonths(monthIso, 1))}
           >
-            <ChevronRightIcon className="size-5 sm:size-4" />
+            <ChevronRightIcon className="size-7" strokeWidth={2.4} />
           </Button>
         </div>
       </header>
 
       <div className={cn(GRID_COLUMNS, "border-b border-line bg-surface-muted/60")}>
-        {WEEKDAY_LABELS.map((label, index) => (
+        {CALENDAR_WEEKDAY_LABELS.map((label, index) => (
           <div
             key={label}
             className={cn(
               "py-2 text-center text-xs font-medium",
-              index === 0 || index === 6 ? "text-brand" : "text-ink-muted",
+              index === 5 || index === 6 ? "text-brand" : "text-ink-muted",
             )}
           >
             {label}
@@ -96,6 +128,57 @@ export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCa
         ))}
       </div>
     </section>
+  );
+}
+
+function PeriodGoalBlock({
+  title,
+  items,
+  onChange,
+}: {
+  title: string;
+  items: FocusItem[];
+  onChange: (next: FocusItem[]) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <h3 className="text-[13px] font-semibold text-ink">{title}</h3>
+      <ul className="mt-1.5 space-y-1">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-2">
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={item.done}
+              aria-label={item.text}
+              onClick={() =>
+                onChange(
+                  items.map((current) =>
+                    current.id === item.id ? { ...current, done: !current.done } : current,
+                  ),
+                )
+              }
+              className={cn(
+                "flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors",
+                item.done
+                  ? "border-accent bg-accent text-on-accent"
+                  : "border-line-strong bg-surface hover:border-accent",
+              )}
+            >
+              {item.done ? <CheckIcon className="size-3" strokeWidth={2.6} /> : null}
+            </button>
+            <span
+              className={cn(
+                "min-w-0 flex-1 text-[13px] leading-snug",
+                item.done ? "text-ink-subtle line-through" : "text-ink",
+              )}
+            >
+              {item.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -161,12 +161,25 @@ export interface Profile {
   name: string;
   /** LINE userId，登入後由後端帶入；尚未連接後端時是空字串。 */
   lineUserId: string;
+  /** LINE 的 pictureUrl；未登入或對方沒設頭貼時為 null。 */
+  avatarUrl: string | null;
+}
+
+export interface PepTalkSettings {
+  /** 頂部彈層是否顯示；點太陽會關掉，設定頁可再打開。 */
+  visible: boolean;
+  /**
+   * null = 使用內建預設清單；有值 = 使用者編輯過的完整清單
+   * （新增／修改／刪除後就寫進來，之後以這份為準）。
+   */
+  quotes: string[] | null;
 }
 
 export interface AppSettings {
   profile: Profile;
   line: LineSettings;
   recipients: ShareRecipient[];
+  pepTalk: PepTalkSettings;
 }
 
 /** 別人分享給我的紀錄本。 */
@@ -179,6 +192,23 @@ export interface SharedJournal {
   entries: DayEntry[];
 }
 
+/**
+ * 專注模式的計時項目。順序就是執行順序。
+ */
+export interface FocusTimerTask {
+  id: string;
+  title: string;
+  emoji: string;
+  /** 分鐘，至少 1。 */
+  durationMinutes: number;
+}
+
+/**
+ * 週／月目標條列，形狀與每日目標相同。
+ * 週以該週週一（`startOfWeek`）的 ISO 當 key；月以 `YYYY-MM` 當 key。
+ */
+export type PeriodGoalMap = Record<string, FocusItem[]>;
+
 export interface DailyState {
   version: number;
   entries: Record<IsoDate, DayEntry>;
@@ -187,6 +217,12 @@ export interface DailyState {
   routines: Routine[];
   /** 日期 → 當天已完成的定期事項 id。 */
   checks: Record<IsoDate, string[]>;
+  /** 本週目標，key = 該週週日的 ISO。 */
+  weekGoals: PeriodGoalMap;
+  /** 本月目標，key = `YYYY-MM`。 */
+  monthGoals: PeriodGoalMap;
+  /** 專注模式的計時佇列。 */
+  focusQueue: FocusTimerTask[];
   settings: AppSettings;
   sharedWithMe: SharedJournal[];
 }

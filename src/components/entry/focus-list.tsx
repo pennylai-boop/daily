@@ -12,9 +12,11 @@ import type { FocusItem } from "@/lib/types";
 export function FocusList({
   items,
   onChange,
+  placeholder = "新增一個今天想完成的目標",
 }: {
   items: FocusItem[];
   onChange: (next: FocusItem[]) => void;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -77,7 +79,7 @@ export function FocusList({
       <div className="flex items-center gap-2">
         <TextInput
           value={draft}
-          placeholder="新增一個今天想完成的目標"
+          placeholder={placeholder}
           className="h-9 py-0 text-sm"
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {

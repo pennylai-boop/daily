@@ -3,19 +3,21 @@
 import { useRef, useState } from "react";
 
 import { LinkIcon, ShareIcon, TrashIcon } from "@/components/icons";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Field, TextInput } from "@/components/ui/field";
 import { Segmented, Switch } from "@/components/ui/segmented";
-import { Card, Chip, SectionHeading } from "@/components/ui/surfaces";
+import { Card, Chip, PageHeading, SectionHeading } from "@/components/ui/surfaces";
 import { todayIso } from "@/lib/date";
-import { buildDemoState } from "@/lib/demo";
 import { copyInviteUrl, shareInvite } from "@/lib/line-invite";
+import { signInWithLine, signOutFromLine } from "@/lib/line-auth";
+import { DEFAULT_PEP_TALKS, resolvePepTalks } from "@/lib/pep-talk";
 import { recordedDates } from "@/lib/stats";
 import { useDailyStore } from "@/lib/store";
 import { normalizeState } from "@/lib/storage";
 import { setThemePreference, useThemePreference } from "@/lib/theme";
-import type { ShareRecipient, ShareScope, ThemePreference } from "@/lib/types";
+import type { Profile, ShareRecipient, ShareScope, ThemePreference } from "@/lib/types";
 
 const THEME_OPTIONS = [
   { value: "light", label: "淺色" },
@@ -35,7 +37,7 @@ const SCOPE_OPTIONS = [
 
 export function SettingsScreen() {
   const store = useDailyStore();
-  const { state, ready, replaceState, resetAll } = store;
+  const { state, ready, replaceState } = store;
   const preference = useThemePreference();
   const fileInput = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -65,46 +67,51 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">設定</h1>
-        <p className="text-sm text-ink-muted">個人資料、通知與分享、外觀與資料備份。</p>
-      </header>
+      <PageHeading
+        title="設定"
+        description="帳號、通知與分享、資料備份；打氣小語在頁面最下方。"
+        action={
+          <Segmented
+            options={THEME_OPTIONS}
+            value={preference}
+            onChange={setThemePreference}
+            ariaLabel="外觀"
+          />
+        }
+      />
+
+      {message ? <p className="text-[13px] text-accent">{message}</p> : null}
 
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading
-          title="個人資料"
-          description="登入後會帶入 LINE 的名稱，這裡可以改成你想顯示的稱呼。"
+          title="帳號"
+          description="只支援 LINE 登入。登入後會帶入名稱與頭貼，顯示名稱可以再改。"
         />
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Field label="顯示名稱" htmlFor="profile-name">
-            <TextInput
-              id="profile-name"
-              value={profile.name}
-              maxLength={20}
-              placeholder="例如：小葉"
-              onChange={(event) => store.updateProfile({ name: event.target.value })}
-            />
-          </Field>
-          <Field label="LINE 帳號" hint="由 LINE 登入帶入，不需要自己填。">
-            <p className="flex h-10 items-center rounded-lg border border-line bg-paper px-3 text-sm text-ink-muted">
-              {profile.lineUserId ? maskLineUserId(profile.lineUserId) : "尚未連結"}
-            </p>
-          </Field>
-        </div>
+        <AccountPanel
+          profile={profile}
+          onMessage={setMessage}
+        />
       </Card>
 
       <Card className="px-4 py-4 sm:px-5">
-        <div className="flex items-start justify-between gap-4">
-          <SectionHeading
-            title="傳送到 LINE 群組"
-            description="每日紀錄完成後，把當天的內容送到指定的 LINE 群組。"
-          />
-          <Switch
-            checked={line.enabled}
-            onChange={(enabled) => store.updateLineSettings({ enabled })}
-            label="啟用 LINE 通知"
-          />
-        </div>
+        <SectionHeading
+          title="傳送到 LINE 群組"
+          description={
+            <>
+              每日紀錄完成後，把當天的內容送到指定的 LINE 群組。
+              自動推送需要後端串接 LINE Messaging API（前端無法直接呼叫，token 也不能放在瀏覽器）。
+              目前設定會先保存下來；在每日紀錄頁按「分享成圖片」，手機的分享面板選 LINE
+              就能立刻送到這個群組。
+            </>
+          }
+          action={
+            <Switch
+              checked={line.enabled}
+              onChange={(enabled) => store.updateLineSettings({ enabled })}
+              label="啟用 LINE 通知"
+            />
+          }
+        />
 
         {line.enabled ? (
           <div className="mt-4 space-y-4">
@@ -140,11 +147,6 @@ export function SettingsScreen() {
                 ariaLabel="傳送時機"
               />
             </Field>
-
-            <p className="rounded-lg border border-line bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink-muted">
-              自動推送需要後端串接 LINE Messaging API（前端無法直接呼叫，token 也不能放在瀏覽器）。
-              目前設定會先保存下來；在每日紀錄頁按「分享成圖片」，手機的分享面板選 LINE 就能立刻送到這個群組。
-            </p>
           </div>
         ) : null}
       </Card>
@@ -152,23 +154,11 @@ export function SettingsScreen() {
       <ShareCard />
 
       <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading title="外觀" description="深色模式適合睡前書寫。" />
-        <div className="mt-3">
-          <Segmented
-            options={THEME_OPTIONS}
-            value={preference}
-            onChange={setThemePreference}
-            ariaLabel="外觀"
-          />
-        </div>
-      </Card>
-
-      <Card className="px-4 py-4 sm:px-5">
         <SectionHeading
           title="資料"
           description={
             ready
-              ? `目前有 ${recordedDates(state).length} 天的紀錄、${state.routines.length} 個定期事項。`
+              ? `目前有 ${recordedDates(state).length} 天的紀錄、${state.routines.length} 個定期目標。`
               : "讀取中…"
           }
         />
@@ -191,36 +181,6 @@ export function SettingsScreen() {
             }}
           />
         </div>
-        {message ? <p className="mt-3 text-[13px] text-accent">{message}</p> : null}
-      </Card>
-
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="示範內容"
-          description="填入約六週的假資料，也會帶入兩份別人分享給你的紀錄。"
-        />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              if (!window.confirm("載入示範資料會覆蓋現有內容，確定嗎？")) return;
-              replaceState(buildDemoState());
-              setMessage("已載入示範資料。");
-            }}
-          >
-            載入示範資料
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (!window.confirm("清除後無法復原，建議先匯出備份。確定要清除全部資料嗎？")) return;
-              resetAll();
-              setMessage("已清除所有資料。");
-            }}
-          >
-            清除全部資料
-          </Button>
-        </div>
       </Card>
 
       <Card className="px-4 py-4 sm:px-5">
@@ -230,7 +190,6 @@ export function SettingsScreen() {
             ["產品名稱", "天天 daily"],
             ["網域", "daily.introvsita.ai"],
             ["使用地區", "台灣（繁體中文）"],
-            ["資料儲存", "瀏覽器 localStorage（尚未連接後端）"],
           ].map(([label, value]) => (
             <div key={label} className="flex gap-3">
               <dt className="w-20 shrink-0 text-ink-subtle">{label}</dt>
@@ -239,6 +198,8 @@ export function SettingsScreen() {
           ))}
         </dl>
       </Card>
+
+      <PepTalkSettingsCard />
     </div>
   );
 }
@@ -246,6 +207,217 @@ export function SettingsScreen() {
 /** LINE userId 很長且沒有可讀性，只留頭尾當作連結狀態的佐證。 */
 function maskLineUserId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
+}
+
+function AccountPanel({
+  profile,
+  onMessage,
+}: {
+  profile: Profile;
+  onMessage: (message: string) => void;
+}) {
+  const store = useDailyStore();
+  const [busy, setBusy] = useState(false);
+  const loggedIn = Boolean(profile.lineUserId);
+
+  const login = async () => {
+    setBusy(true);
+    try {
+      const result = await signInWithLine();
+      if (result.status === "ok") {
+        store.applyLineProfile(result.profile);
+        onMessage("已用 LINE 登入。");
+      } else if (result.status === "unavailable") {
+        onMessage(result.reason);
+      }
+      // redirect：LIFF 會整頁轉走，這裡不用做事。
+    } catch {
+      onMessage("LINE 登入沒有成功，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    if (!window.confirm("確定要登出嗎？這台裝置上的日記與事項會留著，只是解除 LINE 帳號。")) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await signOutFromLine();
+      store.signOut();
+      onMessage("已登出。");
+    } catch {
+      store.signOut();
+      onMessage("已登出（本機狀態已清除）。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!loggedIn) {
+    return (
+      <div className="mt-4 space-y-3">
+        <p className="text-[13px] leading-relaxed text-ink-muted">
+          登入後右上角會顯示你的 LINE 頭貼，分享與被分享紀錄也才能對上同一個身分。
+        </p>
+        <Button type="button" className="w-full sm:w-auto" disabled={busy} onClick={() => void login()}>
+          {busy ? "前往 LINE…" : "用 LINE 登入"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center gap-3">
+        <ProfileAvatar profile={profile} size={48} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-ink">{profile.name || "LINE 使用者"}</p>
+          <p className="mt-0.5 truncate text-[13px] text-ink-muted">
+            LINE {maskLineUserId(profile.lineUserId)}
+          </p>
+        </div>
+      </div>
+
+      <Field label="顯示名稱" htmlFor="profile-name" hint="會出現在分享邀請裡；可和 LINE 名稱不同。">
+        <TextInput
+          id="profile-name"
+          value={profile.name}
+          maxLength={20}
+          placeholder="例如：小葉"
+          onChange={(event) => store.updateProfile({ name: event.target.value })}
+        />
+      </Field>
+
+      <Button type="button" variant="secondary" disabled={busy} onClick={() => void logout()}>
+        {busy ? "登出中…" : "登出"}
+      </Button>
+    </div>
+  );
+}
+
+function PepTalkSettingsCard() {
+  const store = useDailyStore();
+  const { pepTalk } = store.state.settings;
+  const quotes = resolvePepTalks(pepTalk.quotes);
+  const usingDefault = pepTalk.quotes === null;
+  const [draft, setDraft] = useState("");
+  const [filter, setFilter] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  const filtered = filter.trim()
+    ? quotes
+        .map((text, index) => ({ text, index }))
+        .filter(({ text }) => text.includes(filter.trim()))
+    : quotes.map((text, index) => ({ text, index }));
+
+  const shown = expanded ? filtered : filtered.slice(0, 8);
+
+  return (
+    <Card className="px-4 py-4 sm:px-5">
+      <SectionHeading
+        title="打氣小語"
+        description="貼在畫面最上方的一句話。點太陽可隱藏，這裡可以重新開啟，也可新增、修改全部金句。"
+        action={
+          <Switch
+            checked={pepTalk.visible}
+            onChange={store.setPepTalkVisible}
+            label="顯示頂部打氣小語"
+          />
+        }
+      />
+
+      <form
+        className="mt-4 flex flex-col gap-2 sm:flex-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!store.addPepTalkQuote(draft)) return;
+          setDraft("");
+          setExpanded(true);
+        }}
+      >
+        <TextInput
+          value={draft}
+          maxLength={120}
+          aria-label="新增金句"
+          placeholder="新增一則金句…"
+          className="flex-1"
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <Button type="submit" size="sm" disabled={!draft.trim()} className="shrink-0">
+          新增
+        </Button>
+      </form>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <TextInput
+          value={filter}
+          aria-label="搜尋金句"
+          placeholder="搜尋…"
+          className="max-w-xs flex-1"
+          onChange={(event) => setFilter(event.target.value)}
+        />
+        <p className="text-[13px] text-ink-muted">
+          共 {quotes.length} 則
+          {usingDefault ? "（預設）" : "（已自訂）"}
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="ml-auto"
+          onClick={() => {
+            if (!window.confirm("還原成內建金句？你新增或改過的內容會消失。")) return;
+            store.resetPepTalkQuotes();
+            setFilter("");
+          }}
+        >
+          還原預設（{DEFAULT_PEP_TALKS.length}）
+        </Button>
+      </div>
+
+      <ul className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+        {shown.map(({ text, index }) => (
+          <li key={`${index}-${text.slice(0, 12)}`} className="flex items-start gap-2">
+            <textarea
+              value={text}
+              rows={1}
+              maxLength={120}
+              aria-label={`金句 ${index + 1}`}
+              className="min-h-10 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-brand"
+              onChange={(event) => store.setPepTalkQuote(index, event.target.value)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label={`刪除金句 ${index + 1}`}
+              className="mt-1 size-9 shrink-0 px-0 text-alert"
+              onClick={() => store.removePepTalkQuote(index)}
+            >
+              <TrashIcon className="size-4" />
+            </Button>
+          </li>
+        ))}
+        {filtered.length === 0 ? (
+          <li className="py-6 text-center text-[13px] text-ink-muted">沒有符合的金句。</li>
+        ) : null}
+      </ul>
+
+      {filtered.length > 8 ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="mt-2 w-full"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "收合列表" : `展開全部（還有 ${filtered.length - 8} 則）`}
+        </Button>
+      ) : null}
+    </Card>
+  );
 }
 
 function ShareCard() {
@@ -275,7 +447,13 @@ function ShareCard() {
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="分享給誰看"
-        description="用 LINE 送出邀請，對方接受之後你的紀錄才會出現在他的「被分享紀錄」。"
+        description={
+          <>
+            用 LINE 送出邀請，對方接受之後你的紀錄才會出現在他的「被分享紀錄」。
+            LINE 不提供查詢好友的 API，所以沒辦法輸入對方的 LINE ID 加人。在 LINE
+            裡開啟本站時會跳出 LINE 的好友選擇畫面，其他瀏覽器則會退回系統分享面板或複製連結。
+          </>
+        }
       />
 
       {recipients.length > 0 ? (
@@ -331,11 +509,6 @@ function ShareCard() {
       </form>
 
       {note ? <p className="mt-3 text-[13px] text-accent">{note}</p> : null}
-
-      <p className="mt-3 rounded-lg border border-line bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink-muted">
-        LINE 不提供查詢好友的 API，所以沒辦法輸入對方的 LINE ID 加人。在 LINE 裡開啟本站時會跳出
-        LINE 的好友選擇畫面，其他瀏覽器則會退回系統分享面板或複製連結。
-      </p>
     </Card>
   );
 }

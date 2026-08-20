@@ -16,8 +16,7 @@ npm install
 npm run dev
 ```
 
-開啟 http://localhost:3000 。第一次進入是空白的，可以到「設定 → 載入示範資料」填入約六週的假資料，
-馬上看到日曆與回顧頁的完整樣貌。
+開啟 http://localhost:3000 。第一次進入是空白的，可以直接開始寫今天的紀錄。
 
 | 指令 | 說明 |
 | --- | --- |
@@ -63,9 +62,9 @@ npm run dev
 
 | | 手機 | 桌機 |
 | --- | --- | --- |
-| 主導覽 | 底部五個分頁：日曆／定期事項／回顧／支持／被分享紀錄 | 左側欄六個項目 |
+| 主導覽 | 底部五個分頁：日曆／定期事項／回顧／被分享紀錄／支持 | 左側欄六個項目 |
 | | （iOS App 內少一個「支持」，剩四個分頁；見「包成 App」） | |
-| 設定 | 頂端列右側的齒輪圖示 | 併入左側欄 |
+| 設定 | 右上角頭貼進入（只保留頭像） | 左側欄「設定」 |
 | 內容欄位 | 單欄 | 日曆與側欄並排、圖表兩欄 |
 
 手機版的幾個細節：
@@ -84,21 +83,19 @@ npm run dev
 
 ## 功能
 
-### 每天打氣小語（所有頁面的正上方）
+### 每天打氣小語（畫面最上方）
 
-`src/lib/pep-talk.ts` 收了 **400 則**打氣小語，分十個主題各 40 則（起步、持續、休息、接納自己、
-情緒低落、感恩覺察、微小進步、身體照顧、與人相處、勇氣與明天），抽中各主題的機率一樣。
-寫作原則寫在檔案開頭：一則 6–18 個字、不用驚嘆號、不喊「加油」、不預設使用者的處境。
+`src/lib/pep-talk.ts` 預設收了 **250 則**較長的雞湯金句（起步、持續、休息、接納、難關、覺察、
+小勝利、身體、關係、勇氣，並補上常見勵志長句的改寫）。語氣像旁邊的人慢慢說完一句，不預設處境。
 
-橫幅在 `AppShell` 裡（`src/components/pep-talk-banner.tsx`），每 10 秒隨機換一則，點一下立刻換下一則。
-兩個實作細節：
+彈層在 `AppShell` 最上方貼齊（`sticky`，上下不額外留空）：
 
-- **第一則在瀏覽器掛載後才抽**。伺服器和瀏覽器各抽一次一定會抽到不同句子，會造成 hydration 落差，
-  所以句子放在模組層、用 `useSyncExternalStore` 訂閱，`getServerSnapshot()` 回傳 `null`。
-  外框先佔住 `min-h-10`，句子進來時不會把下面的內容推開。
-- **淡入靠 React 的 `key`**：`key={text}` 一換就重播 `.pep-fade-in`（`globals.css`），
-  不必自己管淡出淡入的計時器。整站的 `prefers-reduced-motion` 規則會直接關掉這個動畫。
-- 沒有加 `aria-live`：這是陪襯的句子，每 10 秒念一次只會干擾螢幕閱讀器的使用者。
+- **點太陽** → 隱藏；可在「設定 → 打氣小語」重新開啟
+- **點句子** → 立刻換下一則；否則約 12 秒自動換
+- **設定頁**可瀏覽、搜尋、新增、修改、刪除全部金句，也可一鍵還原預設
+
+第一則在瀏覽器掛載後才抽（`useSyncExternalStore`），避免 hydration 落差；換句靠 `key` 重播
+`.pep-fade-in`。沒有 `aria-live`：陪襯句子不應每十秒打斷螢幕閱讀器。
 
 ### 日曆檢視（`/`）
 
@@ -239,11 +236,12 @@ npm run dev
 上方是連續天數、最長連續、累積天數與書寫段落數，四張數字卡一律並列一行（手機也不折成 2×2，
 `StatTile` 的留白與字級在小螢幕自動縮一號）：這四個數字是同一組指標，一眼掃完比排得漂亮重要。
 接著可以切換統計區間
-（一週／2週／一月／一季／6個月／1年／3年／全部），下方三張折線圖會跟著變動：
+（一週／2週／一月／一季／6個月／1年／3年／全部），下方圖表會跟著變動：
 
-- **心情趨勢**：心情平均分數（1–5）
 - **書寫量比較**：三種記錄格式各自的字數，一格式一條曲線
+- **區間完成率**：各定期事項在這段期間的累計完成比例
 - **定期事項完成率比較**：一事項一條曲線，只計算該做的日子
+- **心情趨勢**（最下方）：心情平均分數（1–5）
 
 區間長度會自動決定折線的顆粒度：31 天以內按日、130 天以內按週、更長則按月。
 
@@ -266,12 +264,13 @@ npm run dev
 
 ### 設定（`/settings`）
 
-- **個人資料**：顯示名稱，以及唯讀的 LINE 帳號（登入後帶入）。
+- **帳號**：只支援 LINE 登入。未登入顯示「用 LINE 登入」；已登入可改顯示名稱並登出
+  （日記資料仍留在本機）。手機從右上角頭貼進入此頁。
 - **傳送到 LINE 群組**：開關、群組名稱、群組 ID、傳送時機（完成當日紀錄時／只在我按下分享時）。
   設定後，每日紀錄頁的分享按鈕會顯示成「分享到〈群組名稱〉」。
 - **分享給誰看**：用 LINE 送出邀請。每張邀請可獨立設定「完整內容」或「只看心情」，
   對方接受前顯示邀請碼、可以再分享一次或複製連結，接受後換成對方的 LINE 身分。
-- 外觀切換、JSON 匯出與匯入、載入示範資料、清除全部資料。
+- 外觀切換、JSON 匯出與匯入。
 
 ### 邀請頁（`/invite/[code]`）
 
@@ -299,7 +298,7 @@ src/
 │  └─ manifest.ts          網頁版「加到主畫面」的 PWA manifest
 ├─ components/
 │  ├─ app-shell.tsx        桌機側邊欄 + 手機底部導覽
-│  ├─ pep-talk-banner.tsx  正上方的打氣小語，10 秒隨機換一則
+│  ├─ pep-talk-banner.tsx  頂部貼齊的打氣小語彈層（點太陽隱藏）
 │  ├─ service-worker.tsx   註冊 public/sw.js（只在正式建置）
 │  ├─ calendar/            月曆、每週完成率與完成度圖例
 │  ├─ charts/              多曲線折線圖與完成度環（自繪 SVG，無圖表套件）
@@ -319,7 +318,7 @@ src/
    ├─ templates.ts         三種記錄格式的定義
    ├─ routines.ts          重複頻率的判斷、描述與預設事項
    ├─ stats.ts             連續天數、心情分布、任意區間與單一事項的完成度
-   ├─ pep-talk.ts          400 則打氣小語與隨機抽選
+   ├─ pep-talk.ts          預設打氣小語與隨機抽選
    ├─ series.ts            統計區間、時間分桶與折線圖資料
    ├─ share-image.ts       Canvas 繪製分享圖片
    ├─ platform.ts          判斷執行環境是瀏覽器／iOS App／Android App
@@ -451,10 +450,31 @@ LINE 有兩個限制決定了做法：**沒有好友清單 API，也不能用 LI
 
 ### Cloud Run
 
+專案 ID：`daily-506100`，區域：`asia-east1`。映像放在
+`asia-east1-docker.pkg.dev/daily-506100/daily/web`。
+
 - `NEXT_PUBLIC_*` 是**建置期**就被寫進 bundle 的，所以要在 Cloud Build 階段（substitutions 或
   `--build-arg`）提供，光在 Cloud Run 設執行期環境變數不會生效。
-- 容器必須監聽 Cloud Run 注入的 `PORT`。
+- 容器必須監聽 Cloud Run 注入的 `PORT`（Dockerfile 預設 `8080`）。
 - 建置用 `npm run build`（Webpack）；`--turbopack` 在這台網路磁碟上會失敗，原因見下一節。
+
+首次／更新部署：
+
+```bash
+gcloud config set project daily-506100
+gcloud builds submit --tag asia-east1-docker.pkg.dev/daily-506100/daily/web:latest
+gcloud run deploy daily \
+  --image asia-east1-docker.pkg.dev/daily-506100/daily/web:latest \
+  --region asia-east1 \
+  --allow-unauthenticated \
+  --port 8080 \
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=daily-506100,GCP_REGION=asia-east1"
+```
+
+服務 URL（自動產生）：https://daily-946947125216.asia-east1.run.app  
+正式網域計畫綁 `daily.introvsita.ai`（DNS 指向 Cloud Run 後再跑
+`gcloud run domain-mappings create --service=daily --domain=daily.introvsita.ai --region=asia-east1`）。
+PAYUNi／SmilePay 等機密請放 Secret Manager，再掛到 Cloud Run，不要烤進映像。
 
 ## 贊助金流：PAYUNi 付款 + SmilePay 發票
 

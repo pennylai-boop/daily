@@ -62,11 +62,6 @@ function parseInput(body: unknown): SponsorInput {
     name: text(raw.name),
     email: text(raw.email),
     message: text(raw.message),
-    invoiceKind: coerceInvoiceKind(raw.invoiceKind),
-    carrierId: text(raw.carrierId),
-    loveCode: text(raw.loveCode),
-    taxId: text(raw.taxId),
-    companyName: text(raw.companyName),
   };
 }
 
@@ -76,8 +71,4 @@ function text(value: unknown): string {
 
 function coerceMethod(value: unknown): SponsorInput["method"] {
   return value === "atm" || value === "cvs" ? value : "credit";
-}
-
-function coerceInvoiceKind(value: unknown): SponsorInput["invoiceKind"] {
-  return value === "mobile" || value === "donate" || value === "company" ? value : "cloud";
 }

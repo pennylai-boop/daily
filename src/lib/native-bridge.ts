@@ -31,6 +31,11 @@ export interface NativeBridge {
   share?: (payload: string) => boolean | Promise<boolean> | void;
   /** 用系統瀏覽器開啟外部網址（WebView 內開第三方頁面常會被擋）。 */
   openExternal?: (url: string) => boolean | void;
+  /**
+   * 開啟／關閉系統勿擾（專注模式計時用）。
+   * 網頁本身開不了系統勿擾，需由 iOS／Android 殼實作；未實作時回 false。
+   */
+  setFocusMode?: (enabled: boolean) => boolean | Promise<boolean> | void;
 }
 
 declare global {

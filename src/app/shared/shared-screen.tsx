@@ -6,7 +6,7 @@ import { BlockReader } from "@/components/entry/block-reader";
 import { MoodGlyph } from "@/components/entry/mood-picker";
 import { CheckIcon } from "@/components/icons";
 import { cn } from "@/components/ui/cn";
-import { Card, Chip, EmptyState, SectionHeading, TextLink } from "@/components/ui/surfaces";
+import { Card, Chip, EmptyState, PageHeading, SectionHeading, TextLink } from "@/components/ui/surfaces";
 import { formatFullDate, formatRelativeDay } from "@/lib/date";
 import { findMood } from "@/lib/moods";
 import { hasContent } from "@/lib/stats";
@@ -30,19 +30,17 @@ export function SharedScreen() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">被分享紀錄</h1>
-        <p className="text-sm text-ink-muted">
-          你在 LINE 上收到邀請並按下接受之後，對方的紀錄就會出現在這裡。
-        </p>
-      </header>
+      <PageHeading
+        title="被分享紀錄"
+        description="你在 LINE 上收到邀請並按下接受之後，對方的紀錄就會出現在這裡。"
+      />
 
       {journals.length === 0 ? (
         <Card>
           <EmptyState
             emoji="📬"
             title="還沒有人分享紀錄給你"
-            description="請對方在「設定 → 分享給誰看」用 LINE 送出邀請，你點開連結接受之後內容就會出現在這裡。想先看看樣子的話，可以到設定載入示範資料。"
+            description="請對方在「設定 → 分享給誰看」用 LINE 送出邀請，你點開連結接受之後內容就會出現在這裡。"
             action={<TextLink href="/settings">前往設定 →</TextLink>}
           />
         </Card>

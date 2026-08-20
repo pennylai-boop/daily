@@ -15,6 +15,8 @@ import type {
   CustomMood,
   DailyState,
   DayEntry,
+  FocusItem,
+  FocusTimerTask,
   IsoDate,
   LineSettings,
   MoodLevel,
@@ -23,6 +25,7 @@ import type {
   ShareRecipient,
   ShareScope,
 } from "./types";
+import { resolvePepTalks } from "./pep-talk";
 
 /**
  * localStorage 之上的極簡外部狀態容器。
@@ -172,6 +175,30 @@ export function deleteRoutine(id: string): void {
   });
 }
 
+/** 寫入某一週的目標清單；空陣列會清掉該 key。 */
+export function setWeekGoals(weekStart: IsoDate, items: FocusItem[]): void {
+  commit((current) => {
+    const weekGoals = { ...current.weekGoals };
+    if (items.length > 0) weekGoals[weekStart] = items;
+    else delete weekGoals[weekStart];
+    return { ...current, weekGoals };
+  });
+}
+
+/** 寫入某一個月的目標清單；`month` 為 `YYYY-MM`。 */
+export function setMonthGoals(month: string, items: FocusItem[]): void {
+  commit((current) => {
+    const monthGoals = { ...current.monthGoals };
+    if (items.length > 0) monthGoals[month] = items;
+    else delete monthGoals[month];
+    return { ...current, monthGoals };
+  });
+}
+
+export function setFocusQueue(tasks: FocusTimerTask[]): void {
+  commit((current) => ({ ...current, focusQueue: tasks }));
+}
+
 export function toggleRoutineCheck(routineId: string, date: IsoDate): void {
   commit((current) => {
     const existing = current.checks[date] ?? [];
@@ -196,10 +223,117 @@ export function updateProfile(patch: Partial<Profile>): void {
   }));
 }
 
+/** 套用 LINE 登入拿到的身分（名稱、userId、頭貼）。 */
+export function applyLineProfile(profile: Profile): void {
+  commit((current) => ({
+    ...current,
+    settings: {
+      ...current.settings,
+      profile: {
+        name: profile.name.trim() || current.settings.profile.name,
+        lineUserId: profile.lineUserId,
+        avatarUrl: profile.avatarUrl,
+      },
+    },
+  }));
+}
+
+/**
+ * 登出：清掉 LINE 身分。本機的日記／事項資料仍留在這台裝置，
+ * 要整包清掉請用設定裡的「清除全部資料」。
+ */
+export function signOut(): void {
+  commit((current) => ({
+    ...current,
+    settings: {
+      ...current.settings,
+      profile: { name: "", lineUserId: "", avatarUrl: null },
+    },
+  }));
+}
+
 export function updateLineSettings(patch: Partial<LineSettings>): void {
   commit((current) => ({
     ...current,
     settings: { ...current.settings, line: { ...current.settings.line, ...patch } },
+  }));
+}
+
+export function setPepTalkVisible(visible: boolean): void {
+  commit((current) => ({
+    ...current,
+    settings: {
+      ...current.settings,
+      pepTalk: { ...current.settings.pepTalk, visible },
+    },
+  }));
+}
+
+/** 確保設定裡有一份可編輯清單（若還在用預設，先複製一份再改）。 */
+function editableQuotes(current: DailyState): string[] {
+  return resolvePepTalks(current.settings.pepTalk.quotes);
+}
+
+export function setPepTalkQuote(index: number, text: string): void {
+  commit((current) => {
+    const quotes = editableQuotes(current);
+    if (index < 0 || index >= quotes.length) return current;
+    const next = text.trim();
+    if (!next) return current;
+    quotes[index] = next;
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        pepTalk: { ...current.settings.pepTalk, quotes },
+      },
+    };
+  });
+}
+
+export function addPepTalkQuote(text: string): boolean {
+  const next = text.trim();
+  if (!next) return false;
+  commit((current) => {
+    const quotes = editableQuotes(current);
+    quotes.unshift(next);
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        pepTalk: { ...current.settings.pepTalk, quotes },
+      },
+    };
+  });
+  return true;
+}
+
+export function removePepTalkQuote(index: number): void {
+  commit((current) => {
+    const quotes = editableQuotes(current);
+    if (index < 0 || index >= quotes.length) return current;
+    quotes.splice(index, 1);
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        pepTalk: {
+          ...current.settings.pepTalk,
+          // 刪光之後仍存空陣列，避免又跳回預設 250 則把刪除撤銷掉。
+          quotes,
+        },
+      },
+    };
+  });
+}
+
+export function resetPepTalkQuotes(): void {
+  commit((current) => ({
+    ...current,
+    settings: {
+      ...current.settings,
+      pepTalk: { ...current.settings.pepTalk, quotes: null },
+    },
   }));
 }
 
@@ -311,9 +445,19 @@ export interface DailyStore {
   addRoutine: typeof addRoutine;
   updateRoutine: typeof updateRoutine;
   deleteRoutine: typeof deleteRoutine;
+  setWeekGoals: typeof setWeekGoals;
+  setMonthGoals: typeof setMonthGoals;
+  setFocusQueue: typeof setFocusQueue;
   toggleRoutineCheck: typeof toggleRoutineCheck;
   updateProfile: typeof updateProfile;
+  applyLineProfile: typeof applyLineProfile;
+  signOut: typeof signOut;
   updateLineSettings: typeof updateLineSettings;
+  setPepTalkVisible: typeof setPepTalkVisible;
+  setPepTalkQuote: typeof setPepTalkQuote;
+  addPepTalkQuote: typeof addPepTalkQuote;
+  removePepTalkQuote: typeof removePepTalkQuote;
+  resetPepTalkQuotes: typeof resetPepTalkQuotes;
   createInvite: typeof createInvite;
   acceptInvite: typeof acceptInvite;
   updateRecipient: typeof updateRecipient;
@@ -335,9 +479,19 @@ export function useDailyStore(): DailyStore {
     addRoutine,
     updateRoutine,
     deleteRoutine,
+    setWeekGoals,
+    setMonthGoals,
+    setFocusQueue,
     toggleRoutineCheck,
     updateProfile,
+    applyLineProfile,
+    signOut,
     updateLineSettings,
+    setPepTalkVisible,
+    setPepTalkQuote,
+    addPepTalkQuote,
+    removePepTalkQuote,
+    resetPepTalkQuotes,
     createInvite,
     acceptInvite,
     updateRecipient,

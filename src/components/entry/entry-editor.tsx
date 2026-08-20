@@ -5,10 +5,9 @@ import { useEffect, useState } from "react";
 
 import { BlockEditor } from "@/components/entry/block-editor";
 import { FocusList } from "@/components/entry/focus-list";
-import { MoodField } from "@/components/entry/mood-picker";
+import { MoodField, MoodGlyph } from "@/components/entry/mood-picker";
 import { PhotoStrip } from "@/components/entry/photo-strip";
 import {
-  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ImageIcon,
@@ -16,18 +15,19 @@ import {
 } from "@/components/icons";
 import { RoutineCheckGrid } from "@/components/routines/check-grid";
 import { Button, LinkButton } from "@/components/ui/button";
-import { cn } from "@/components/ui/cn";
 import { CollapsibleSection } from "@/components/ui/collapsible";
 import { Chip } from "@/components/ui/surfaces";
 import {
   addDays,
+  canDeleteEntry,
+  canEditEntry,
   formatFullDate,
   formatRelativeDay,
   formatShortDate,
-  isFuture,
+  todayIso,
 } from "@/lib/date";
-import { DEFAULT_MOOD } from "@/lib/moods";
-import { describeFrequency, routinesDueOn, writableRoutinesNotDue } from "@/lib/routines";
+import { DEFAULT_MOOD, findMood } from "@/lib/moods";
+import { routinesDueOn, writableRoutinesNotDue } from "@/lib/routines";
 import { shareDayImage } from "@/lib/share-image";
 import { hasContent } from "@/lib/stats";
 import { createId } from "@/lib/storage";
@@ -61,21 +61,29 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
 
+  const editable = canEditEntry(date);
+  const deletable = canDeleteEntry(date);
+  const today = todayIso();
+  const isToday = date === today;
+
   const update = (patch: Partial<DayEntry>) => {
+    if (!editable) return;
     setDraft((current) => ({ ...current, ...patch }));
     setDirty(true);
     setStatus("saving");
   };
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || !editable) return;
     const timer = setTimeout(() => {
       const next = { ...draft, updatedAt: new Date().toISOString() };
       // 預設心情只在這天真的有內容時才寫進去，單純點開某一天不會留下紀錄。
       if (!next.mood && hasContent(next)) next.mood = DEFAULT_MOOD_ID;
 
       if (!hasContent(next) && next.blocks.length === 0) {
-        deleteEntry(date);
+        // 舊紀錄不可刪：只有今天可以把清空後的日子從資料裡拿掉。
+        if (deletable) deleteEntry(date);
+        else saveEntry(next);
         setStatus("saved");
       } else {
         setStatus(saveEntry(next) ? "saved" : "full");
@@ -83,15 +91,13 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       setDirty(false);
     }, 600);
     return () => clearTimeout(timer);
-  }, [dirty, draft, date, saveEntry, deleteEntry]);
+  }, [dirty, draft, date, editable, deletable, saveEntry, deleteEntry]);
 
   const checkedIds = state.checks[date] ?? [];
   const dueRoutines = routinesDueOn(state.routines, date);
-  // 只打勾的事項並排成格狀，有書寫格式的仍然是一列小方框（打勾後要在下方展開欄位）。
-  const writingRoutines = dueRoutines.filter((routine) => routine.template);
-  const checkOnlyRoutines = dueRoutines.filter((routine) => !routine.template);
   const extraRoutines = writableRoutinesNotDue(state.routines, date);
   const relative = formatRelativeDay(date);
+  const moodOption = findMood(draft.mood, state.customMoods) ?? DEFAULT_MOOD;
 
   const blockFor = (routine: Routine) =>
     draft.blocks.find(
@@ -113,6 +119,7 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     update({ blocks: draft.blocks.filter((block) => block.id !== id) });
 
   const toggleRoutine = (routine: Routine) => {
+    if (!editable) return;
     const wasChecked = checkedIds.includes(routine.id);
     toggleRoutineCheck(routine.id, date);
 
@@ -168,18 +175,43 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
 
           <div className="flex min-w-0 flex-col items-center gap-1 text-center">
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-              <h1 className="text-[17px] font-semibold tracking-tight text-ink sm:text-xl">
-                <span className="sm:hidden">{formatShortDate(date)}</span>
-                <span className="hidden sm:inline">{formatFullDate(date)}</span>
-              </h1>
-              {relative ? <Chip tone="brand">{relative}</Chip> : null}
-              <MoodField
-                value={draft.mood}
-                fallback={DEFAULT_MOOD}
-                onChange={(mood) => update({ mood })}
-              />
+              {!isToday ? (
+                <Link
+                  href={`/entry/${today}`}
+                  className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-lg outline-offset-2 focus-visible:outline-2 focus-visible:outline-brand"
+                  aria-label="回到今天"
+                >
+                  <h1 className="text-[17px] font-semibold tracking-tight text-ink sm:text-xl">
+                    <span className="sm:hidden">{formatShortDate(date)}</span>
+                    <span className="hidden sm:inline">{formatFullDate(date)}</span>
+                  </h1>
+                  <Chip tone="brand">{relative ?? "回今天"}</Chip>
+                </Link>
+              ) : (
+                <>
+                  <h1 className="text-[17px] font-semibold tracking-tight text-ink sm:text-xl">
+                    <span className="sm:hidden">{formatShortDate(date)}</span>
+                    <span className="hidden sm:inline">{formatFullDate(date)}</span>
+                  </h1>
+                  {relative ? <Chip tone="brand">{relative}</Chip> : null}
+                </>
+              )}
+              {editable ? (
+                <MoodField
+                  value={draft.mood}
+                  fallback={DEFAULT_MOOD}
+                  onChange={(mood) => update({ mood })}
+                />
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pr-2.5 pl-1.5 text-[13px] font-medium text-ink">
+                  <MoodGlyph mood={moodOption} size={22} />
+                  {moodOption.label}
+                </span>
+              )}
             </div>
-            <SaveIndicator status={status} />
+            {editable ? <SaveIndicator status={status} /> : (
+              <p className="text-[12px] text-ink-subtle">唯讀</p>
+            )}
           </div>
 
           <LinkButton
@@ -193,13 +225,15 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
           </LinkButton>
         </div>
 
-        {isFuture(date) ? (
-          <p className="rounded-lg border border-line bg-paper px-3.5 py-2.5 text-[13px] text-ink-muted">
-            這是未來的日期，你可以先寫下想達成的目標。
+        {!editable ? (
+          <p className="rounded-lg bg-accent px-3.5 py-2.5 text-[13px] text-on-accent">
+            只能書寫今天的紀錄；當天中午前還可以補寫昨天。過去的內容可以查看，但不能修改或刪除。
           </p>
         ) : null}
       </header>
 
+      <div className="relative">
+        <fieldset disabled={!editable} className="min-w-0 space-y-5 border-0 p-0 disabled:opacity-90">
       <section className="card px-4 py-4">
         <h2 className="text-sm font-semibold text-ink">當日目標</h2>
         <p className="mt-0.5 mb-3 text-[13px] text-ink-muted">寫下想完成的事，完成後打勾。</p>
@@ -218,20 +252,11 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       >
         {dueRoutines.length > 0 ? (
           <div className="space-y-2.5">
-            {writingRoutines.length > 0 ? (
-              <RoutineChips
-                routines={writingRoutines}
-                checkedIds={checkedIds}
-                onToggle={toggleRoutine}
-              />
-            ) : null}
-            {checkOnlyRoutines.length > 0 ? (
-              <RoutineCheckGrid
-                routines={checkOnlyRoutines}
-                checkedIds={checkedIds}
-                onToggle={toggleRoutine}
-              />
-            ) : null}
+            <RoutineCheckGrid
+              routines={dueRoutines}
+              checkedIds={checkedIds}
+              onToggle={toggleRoutine}
+            />
             {dueRoutines.map((routine) => (
               <RoutinePanel
                 key={routine.id}
@@ -262,7 +287,7 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
           defaultOpen={false}
         >
           <div className="space-y-2.5">
-            <RoutineChips
+            <RoutineCheckGrid
               routines={extraRoutines}
               checkedIds={checkedIds}
               onToggle={toggleRoutine}
@@ -303,26 +328,38 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
         </p>
         <PhotoStrip photos={draft.photos} onChange={(photos) => update({ photos })} />
       </section>
+        </fieldset>
+        {!editable ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-xl bg-accent/10"
+          />
+        ) : null}
+      </div>
 
       {hasContent(draft) ? (
         <footer className="space-y-2 border-t border-line pt-4">
           <div className="flex items-center justify-between gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-alert hover:bg-alert/10 hover:text-alert"
-              onClick={() => {
-                if (!window.confirm(`確定要刪除 ${formatFullDate(date)} 的紀錄嗎？`)) return;
-                deleteEntry(date);
-                setDraft(createDayEntry(date));
-                setDirty(false);
-                setStatus("idle");
-              }}
-            >
-              <TrashIcon className="size-4" />
-              <span className="hidden sm:inline">刪除這天的紀錄</span>
-              <span className="sm:hidden">刪除</span>
-            </Button>
+            {deletable ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-alert hover:bg-alert/10 hover:text-alert"
+                onClick={() => {
+                  if (!window.confirm(`確定要刪除 ${formatFullDate(date)} 的紀錄嗎？`)) return;
+                  deleteEntry(date);
+                  setDraft(createDayEntry(date));
+                  setDirty(false);
+                  setStatus("idle");
+                }}
+              >
+                <TrashIcon className="size-4" />
+                <span className="hidden sm:inline">刪除這天的紀錄</span>
+                <span className="sm:hidden">刪除</span>
+              </Button>
+            ) : (
+              <p className="text-[13px] text-ink-subtle">過去的紀錄不可刪除</p>
+            )}
 
             <Button
               size="sm"
@@ -350,65 +387,9 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
 }
 
 /**
- * 有書寫格式的事項用的小方框，一列可以並排好幾個、寬度隨名字長度。
- *
- * 每個事項各佔一張卡片時，光是「今天要做什麼」就吃掉整個螢幕。這裡不排成固定欄數的格狀：
- * 打勾後下方會展開對應欄位（`RoutinePanel`），並排會看不出勾了哪一個對應哪一段。
- * 只打勾的事項則交給 `RoutineCheckGrid` 三欄並排。
+ * 有書寫格式的事項打勾後展開的欄位；已經寫過內容的話取消打勾也會留著。
+ * 上方勾選列一律用 `RoutineCheckGrid` 三欄並排。
  */
-function RoutineChips({
-  routines,
-  checkedIds,
-  onToggle,
-}: {
-  routines: Routine[];
-  checkedIds: string[];
-  onToggle: (routine: Routine) => void;
-}) {
-  return (
-    <ul className="flex flex-wrap gap-2">
-      {routines.map((routine) => {
-        const checked = checkedIds.includes(routine.id);
-        return (
-          <li key={routine.id}>
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={checked}
-              // 頻率與備註移到 tooltip：清單上只留看得懂的名字。
-              title={`${describeFrequency(routine.frequency)}${routine.note ? `・${routine.note}` : ""}`}
-              onClick={() => onToggle(routine)}
-              className={cn(
-                "flex min-h-10 items-center gap-2 rounded-xl border py-1.5 pr-3 pl-2 text-sm transition-colors",
-                checked
-                  ? "border-accent/40 bg-accent-tint font-medium text-accent"
-                  : "border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-muted",
-              )}
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-                  checked
-                    ? "border-accent bg-accent text-on-accent"
-                    : "border-line-strong bg-surface",
-                )}
-              >
-                {checked ? <CheckIcon className="size-3.5" strokeWidth={2.6} /> : null}
-              </span>
-              <span aria-hidden className="text-base">
-                {routine.emoji}
-              </span>
-              <span className="max-w-44 truncate">{routine.title}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/** 有書寫格式的事項打勾後展開的欄位；已經寫過內容的話取消打勾也會留著。 */
 function RoutinePanel({
   routine,
   block,

@@ -43,13 +43,11 @@ export default async function Page(props: PageProps<"/support/result">) {
         ) : null}
         {read("bankType") ? <Row label="轉入銀行代碼" value={read("bankType")} /> : null}
         {read("expireDate") ? <Row label="繳費期限" value={read("expireDate")} /> : null}
-        {read("invoice") ? <Row label="發票號碼" value={read("invoice")} mono /> : null}
         {read("message") ? <Row label="金流回應" value={read("message")} /> : null}
       </Card>
 
       <p className="text-[13px] leading-relaxed text-ink-subtle">
-        發票會在款項入帳後由速買配 SmilePay 開立，若填了信箱大約五分鐘內會收到。
-        有任何問題可以帶著訂單編號來信詢問。
+        贊助不開發票。款項入帳後會自動寄感謝信到你填的信箱。有任何問題可以帶著訂單編號來信詢問。
       </p>
 
       <LinkButton href="/">回到日曆</LinkButton>
@@ -77,7 +75,7 @@ function describe({
   if (status === "SUCCESS" && tradeStatus === "0" && payNo) {
     return {
       title: "已取得繳費資訊",
-      description: "請在期限內完成繳費，入帳後才會開立發票。",
+      description: "請在期限內完成繳費，入帳後會寄感謝信到你的信箱。",
     };
   }
 

@@ -21,13 +21,17 @@ export const THEME_KEY = "daily.theme";
  * 2：觀心書從五個問答改成身／口／意的條列。
  * 3：分享對象從 email 改成 LINE 邀請。
  * 4：加入自訂心情與當天的照片紀錄。
+ * 5：打氣小語可在設定裡編輯，並記住是否顯示頂部彈層。
+ * 6：定期目標頁加入週／月目標條列。
+ * 7：專注模式計時佇列。
  */
-export const STORE_VERSION = 4;
+export const STORE_VERSION = 7;
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  profile: { name: "", lineUserId: "" },
+  profile: { name: "", lineUserId: "", avatarUrl: null },
   line: { enabled: false, groupName: "", groupId: "", trigger: "onComplete" },
   recipients: [],
+  pepTalk: { visible: true, quotes: null },
 };
 
 export const EMPTY_STATE: DailyState = {
@@ -36,6 +40,9 @@ export const EMPTY_STATE: DailyState = {
   customMoods: [],
   routines: [],
   checks: {},
+  weekGoals: {},
+  monthGoals: {},
+  focusQueue: [],
   settings: DEFAULT_SETTINGS,
   sharedWithMe: [],
 };
@@ -106,11 +113,54 @@ export function normalizeState(value: unknown): DailyState {
       : [],
     routines: Array.isArray(candidate.routines) ? candidate.routines.map(withTemplate) : [],
     checks: isRecord(candidate.checks) ? (candidate.checks as DailyState["checks"]) : {},
+    weekGoals: normalizePeriodGoalMap(candidate.weekGoals),
+    monthGoals: normalizePeriodGoalMap(candidate.monthGoals),
+    focusQueue: normalizeFocusQueue(candidate.focusQueue),
     settings: mergeSettings(candidate.settings),
     sharedWithMe: Array.isArray(candidate.sharedWithMe)
       ? candidate.sharedWithMe.map(normalizeJournal)
       : [],
   };
+}
+
+function normalizeFocusQueue(value: unknown): DailyState["focusQueue"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (item): item is { id: string; title: string; emoji?: string; durationMinutes?: number } =>
+        !!item &&
+        typeof item === "object" &&
+        typeof (item as { id?: unknown }).id === "string" &&
+        typeof (item as { title?: unknown }).title === "string",
+    )
+    .map((item) => ({
+      id: item.id,
+      title: item.title.trim() || "未命名",
+      emoji: (item.emoji ?? "⏱").trim() || "⏱",
+      durationMinutes: Math.max(1, Math.min(180, Math.trunc(Number(item.durationMinutes) || 25))),
+    }));
+}
+
+function normalizePeriodGoalMap(value: unknown): DailyState["weekGoals"] {
+  if (!isRecord(value)) return {};
+  const next: DailyState["weekGoals"] = {};
+  for (const [key, items] of Object.entries(value)) {
+    if (!Array.isArray(items)) continue;
+    next[key] = items
+      .filter(
+        (item): item is { id: string; text: string; done?: boolean } =>
+          !!item &&
+          typeof item === "object" &&
+          typeof (item as { id?: unknown }).id === "string" &&
+          typeof (item as { text?: unknown }).text === "string",
+      )
+      .map((item) => ({
+        id: item.id,
+        text: item.text,
+        done: Boolean(item.done),
+      }));
+  }
+  return next;
 }
 
 /** v3 以前沒有 photos 欄位。 */
@@ -151,10 +201,17 @@ function normalizeCustomMood(value: CustomMood): CustomMood | null {
 
 function mergeSettings(value: AppSettings | undefined): AppSettings {
   if (!value) return DEFAULT_SETTINGS;
+  const pep = value.pepTalk;
   return {
     profile: normalizeProfile(value.profile),
     line: { ...DEFAULT_SETTINGS.line, ...value.line },
     recipients: Array.isArray(value.recipients) ? value.recipients.map(normalizeRecipient) : [],
+    pepTalk: {
+      visible: pep?.visible !== false,
+      quotes: Array.isArray(pep?.quotes)
+        ? pep.quotes.map((q) => (typeof q === "string" ? q.trim() : "")).filter(Boolean)
+        : null,
+    },
   };
 }
 
@@ -163,6 +220,10 @@ function normalizeProfile(value: Profile | undefined): Profile {
   return {
     name: value?.name ?? "",
     lineUserId: value?.lineUserId ?? "",
+    avatarUrl:
+      typeof value?.avatarUrl === "string" && value.avatarUrl.startsWith("http")
+        ? value.avatarUrl
+        : null,
   };
 }
 

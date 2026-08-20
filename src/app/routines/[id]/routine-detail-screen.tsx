@@ -26,6 +26,7 @@ import {
   isSameMonth,
   startOfMonth,
   todayIso,
+  CALENDAR_WEEKDAY_LABELS,
   WEEKDAY_LABELS,
 } from "@/lib/date";
 import { describeFrequency, isRoutineDueOn } from "@/lib/routines";
@@ -73,9 +74,9 @@ export function RoutineDetailScreen({ id }: { id: string }) {
         <Card>
           <EmptyState
             emoji="🔍"
-            title="找不到這個定期事項"
+            title="找不到這個定期目標"
             description="它可能已經被刪除了。回到列表看看目前有哪些事項。"
-            action={<TextLink href="/routines">回到定期事項 →</TextLink>}
+            action={<TextLink href="/routines">回到定期目標 →</TextLink>}
           />
         </Card>
       </div>
@@ -100,7 +101,7 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
-        <TextLink href="/routines">← 定期事項</TextLink>
+        <TextLink href="/routines">← 定期目標</TextLink>
       </div>
 
       <header className="flex items-start gap-3">
@@ -149,19 +150,19 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
               size="sm"
               variant="ghost"
               aria-label="上一個月"
-              className="size-9 px-0 sm:size-8"
+              className="size-8 shrink-0 border border-line-strong px-0"
               onClick={() => setMonthIso(addMonths(monthIso, -1))}
             >
-              <ChevronLeftIcon className="size-5" />
+              <ChevronLeftIcon className="size-6" strokeWidth={2} />
             </Button>
             <Button
               size="sm"
               variant="ghost"
               aria-label="下一個月"
-              className="size-9 px-0 sm:size-8"
+              className="size-8 shrink-0 border border-line-strong px-0"
               onClick={() => setMonthIso(addMonths(monthIso, 1))}
             >
-              <ChevronRightIcon className="size-5" />
+              <ChevronRightIcon className="size-6" strokeWidth={2} />
             </Button>
           </div>
         </div>
@@ -194,12 +195,12 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
         </div>
 
         <div className="grid grid-cols-7 border-y border-line bg-surface-muted/60">
-          {WEEKDAY_LABELS.map((label, index) => (
+          {CALENDAR_WEEKDAY_LABELS.map((label, index) => (
             <div
               key={label}
               className={cn(
                 "py-1.5 text-center text-xs font-medium",
-                index === 0 || index === 6 ? "text-brand" : "text-ink-muted",
+                index === 5 || index === 6 ? "text-brand" : "text-ink-muted",
               )}
             >
               {label}

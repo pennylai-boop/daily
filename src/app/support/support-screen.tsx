@@ -6,15 +6,15 @@ import { HeartIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Field, TextInput } from "@/components/ui/field";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Segmented } from "@/components/ui/segmented";
-import { Card, SectionHeading } from "@/components/ui/surfaces";
+import { Card, PageHeading, SectionHeading } from "@/components/ui/surfaces";
 import { usePlatform } from "@/lib/platform";
 import {
   createSponsorInput,
   formatAmount,
   getMethod,
   hasErrors,
-  INVOICE_KINDS,
   PRESET_AMOUNTS,
   SPONSOR_METHODS,
   validateSponsor,
@@ -28,13 +28,7 @@ const METHOD_OPTIONS = SPONSOR_METHODS.map((method) => ({
   label: method.label,
 }));
 
-export function SupportScreen({
-  paymentReady,
-  invoiceReady,
-}: {
-  paymentReady: boolean;
-  invoiceReady: boolean;
-}) {
+export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
   const [input, setInput] = useState<SponsorInput>(createSponsorInput);
   const [amountText, setAmountText] = useState(String(createSponsorInput().amount));
   const [errors, setErrors] = useState<SponsorErrors>({});
@@ -92,13 +86,10 @@ export function SupportScreen({
   return (
     // iOS App 內整塊隱藏，改由 page.tsx 的提示卡片接手（規則見 globals.css 的註解）。
     <div className="hide-in-ios-app mx-auto max-w-2xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">支持天天 daily</h1>
-        <p className="text-sm leading-relaxed text-ink-muted">
-          天天 daily 沒有付費方案，也不放廣告。如果它陪你寫下了一些日子，可以用任意金額贊助，
-          讓它繼續維護下去。
-        </p>
-      </header>
+      <PageHeading
+        title="支持天天 daily"
+        description="天天 daily 沒有付費方案，也不放廣告。如果它陪你寫下了一些日子，可以用任意金額贊助，讓它繼續維護下去。"
+      />
 
       {!paymentReady ? (
         <Card className="px-4 py-4 sm:px-5">
@@ -131,141 +122,54 @@ export function SupportScreen({
           ))}
         </div>
 
-        <div className="mt-4 space-y-1.5">
-          <label htmlFor="support-amount" className="block text-sm font-medium text-ink-muted">
-            自訂金額
-          </label>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-ink-subtle">NT$</span>
-            <TextInput
-              id="support-amount"
-              value={amountText}
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="例如 250"
-              aria-invalid={Boolean(errors.amount)}
-              onChange={(event) => setAmount(event.target.value)}
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex items-center gap-1">
+              <label htmlFor="support-amount" className="block text-sm font-medium text-ink-muted">
+                自訂金額
+              </label>
+              <InfoHint label="自訂金額的說明">
+                {method.label}可接受 {method.min.toLocaleString("zh-TW")}～
+                {method.max.toLocaleString("zh-TW")} 元。
+              </InfoHint>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-ink-subtle">NT$</span>
+              <TextInput
+                id="support-amount"
+                value={amountText}
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="例如 250"
+                aria-invalid={Boolean(errors.amount)}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            </div>
+            <FieldError message={errors.amount} />
+          </div>
+
+          <div className="min-w-0 space-y-1.5 sm:shrink-0">
+            <div className="flex items-center gap-1">
+              <p className="text-sm font-medium text-ink-muted">付款方式</p>
+              <InfoHint label="付款方式的說明">{method.hint}</InfoHint>
+            </div>
+            <Segmented
+              options={METHOD_OPTIONS}
+              value={input.method}
+              ariaLabel="付款方式"
+              onChange={(value: SponsorMethod) => patch({ method: value })}
             />
           </div>
-          <p className="text-[13px] text-ink-subtle">
-            {method.label}可接受 {method.min.toLocaleString("zh-TW")}～
-            {method.max.toLocaleString("zh-TW")} 元。
-          </p>
-          <FieldError message={errors.amount} />
-        </div>
-
-        <div className="mt-4 space-y-1.5">
-          <p className="text-sm font-medium text-ink-muted">付款方式</p>
-          <Segmented
-            options={METHOD_OPTIONS}
-            value={input.method}
-            ariaLabel="付款方式"
-            onChange={(value: SponsorMethod) => patch({ method: value })}
-            className="max-w-full"
-          />
-          <p className="text-[13px] text-ink-subtle">{method.hint}</p>
         </div>
       </Card>
 
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading
-          title="電子發票"
-          description="贊助也會開立電子發票，品名固定是「贊助天天 daily」。"
+          title="聯絡與留言"
+          description="信箱必填，付款成功後會自動寄感謝信。稱呼與留言為選填。"
         />
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {INVOICE_KINDS.map((kind) => (
-            <button
-              key={kind.id}
-              type="button"
-              onClick={() => patch({ invoiceKind: kind.id })}
-              className={cn(
-                "flex flex-col items-start gap-0.5 rounded-lg border px-3.5 py-3 text-left transition-colors",
-                input.invoiceKind === kind.id
-                  ? "border-accent bg-surface-muted ring-2 ring-line"
-                  : "border-line-strong hover:bg-surface-muted",
-              )}
-            >
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  input.invoiceKind === kind.id ? "text-accent" : "text-ink",
-                )}
-              >
-                {kind.label}
-              </span>
-              <span className="text-[13px] leading-relaxed text-ink-muted">{kind.hint}</span>
-            </button>
-          ))}
-        </div>
-
         <div className="mt-4 space-y-4">
-          {input.invoiceKind === "mobile" ? (
-            <Field label="手機條碼載具" hint="財政部的手機條碼，斜線加 7 位大寫英數。">
-              <TextInput
-                value={input.carrierId}
-                placeholder="/ABC1234"
-                maxLength={8}
-                autoCapitalize="characters"
-                aria-invalid={Boolean(errors.carrierId)}
-                onChange={(event) => patch({ carrierId: event.target.value.toUpperCase() })}
-              />
-              <FieldError message={errors.carrierId} />
-            </Field>
-          ) : null}
-
-          {input.invoiceKind === "donate" ? (
-            <Field label="愛心碼" hint="社福團體的捐贈碼，3～7 位數字。">
-              <TextInput
-                value={input.loveCode}
-                placeholder="例如 25885"
-                inputMode="numeric"
-                maxLength={7}
-                aria-invalid={Boolean(errors.loveCode)}
-                onChange={(event) =>
-                  patch({ loveCode: event.target.value.replace(/\D/g, "").slice(0, 7) })
-                }
-              />
-              <FieldError message={errors.loveCode} />
-            </Field>
-          ) : null}
-
-          {input.invoiceKind === "company" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="統一編號">
-                <TextInput
-                  value={input.taxId}
-                  placeholder="8 位數字"
-                  inputMode="numeric"
-                  maxLength={8}
-                  aria-invalid={Boolean(errors.taxId)}
-                  onChange={(event) =>
-                    patch({ taxId: event.target.value.replace(/\D/g, "").slice(0, 8) })
-                  }
-                />
-                <FieldError message={errors.taxId} />
-              </Field>
-              <Field label="公司名稱">
-                <TextInput
-                  value={input.companyName}
-                  placeholder="發票抬頭"
-                  maxLength={60}
-                  aria-invalid={Boolean(errors.companyName)}
-                  onChange={(event) => patch({ companyName: event.target.value })}
-                />
-                <FieldError message={errors.companyName} />
-              </Field>
-            </div>
-          ) : null}
-
-          <Field
-            label={input.invoiceKind === "cloud" ? "信箱" : "信箱（選填）"}
-            hint={
-              input.invoiceKind === "cloud"
-                ? "雲端發票會寄到這個信箱，付款通知也會用它。"
-                : "填了會收到發票開立通知。"
-            }
-          >
+          <Field label="信箱" hint="付款成功後會寄感謝信到這裡。">
             <TextInput
               type="email"
               value={input.email}
@@ -277,18 +181,6 @@ export function SupportScreen({
             />
             <FieldError message={errors.email} />
           </Field>
-        </div>
-
-        {!invoiceReady ? (
-          <p className="mt-4 rounded-lg bg-paper px-3 py-2 text-[13px] leading-relaxed text-ink-muted">
-            這個環境還沒設定 SmilePay 發票憑證，付款會成功但不會自動開票。
-          </p>
-        ) : null}
-      </Card>
-
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading title="想說的話" description="都是選填，只是讓我知道是誰在支持。" />
-        <div className="mt-4 space-y-4">
           <Field label="稱呼" hint="留空就是匿名贊助。">
             <TextInput
               value={input.name}
@@ -332,13 +224,12 @@ export function SupportScreen({
             onClick={submit}
             className="shrink-0"
           >
-            <HeartIcon className="size-[18px]" />
+            <HeartIcon className="size-[18px] text-on-brand" />
             {pending ? "前往付款…" : "前往付款"}
           </Button>
         </div>
         <p className="text-[13px] leading-relaxed text-ink-subtle">
-          付款由統一金流 PAYUNi 處理，卡號不會經過天天 daily；發票由速買配 SmilePay
-          在付款成功後開立。贊助屬於自願支持，不是商品購買，送出後不提供退款。
+          付款由統一金流 PAYUNi 處理，卡號不會經過天天 daily。贊助不開發票；付款成功後會自動寄感謝信到你填的信箱。贊助屬於自願支持，不是商品購買，送出後不提供退款。
         </p>
       </footer>
     </div>

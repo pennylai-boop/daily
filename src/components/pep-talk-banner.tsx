@@ -1,44 +1,44 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { randomPepTalk } from "@/lib/pep-talk";
+import { cn } from "@/components/ui/cn";
+import { randomPepTalk, resolvePepTalks } from "@/lib/pep-talk";
+import { setPepTalkVisible, useDailyStore } from "@/lib/store";
 
 /** 每則停留的時間。 */
-const HOLD_MS = 10_000;
+const HOLD_MS = 12_000;
 
 /**
  * 目前這一則放在模組層，用 `useSyncExternalStore` 訂閱。
  *
  * 伺服器端快照回傳 null（還沒抽），瀏覽器 hydration 完成後才抽第一則，
  * 否則兩邊各抽一次一定會抽到不同句子，造成 hydration 落差。
- * 這也是 store.ts、platform.ts 用的同一套做法。
  */
 let current: string | null = null;
 const listeners = new Set<() => void>();
 let timer: number | undefined;
+let poolKey = "";
+/** 給 interval / 點擊換句用的最新清單，只在 effect 裡更新。 */
+let activePool: readonly string[] = [];
 
 function emit() {
   for (const listener of listeners) listener();
 }
 
-function rotate() {
-  current = randomPepTalk(current);
+function rotate(pool: readonly string[]) {
+  current = randomPepTalk(pool, current);
   emit();
 }
 
-function schedule() {
+function schedule(pool: readonly string[]) {
   window.clearInterval(timer);
-  timer = window.setInterval(rotate, HOLD_MS);
+  if (pool.length === 0) return;
+  timer = window.setInterval(() => rotate(activePool), HOLD_MS);
 }
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  if (listeners.size === 1) {
-    if (current === null) rotate();
-    schedule();
-  }
-
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0) {
@@ -57,36 +57,75 @@ function getServerSnapshot(): string | null {
 }
 
 /**
- * 畫面正上方的打氣小語，每十秒隨機換一則，也可以點一下立刻換。
- *
- * 沒有 aria-live：這是陪襯的句子，每十秒念一次只會干擾螢幕閱讀器的使用者。
+ * 貼齊畫面正上方的打氣小語彈層（sticky，不額外留上下空隙）。
+ * 點太陽隱藏；點句子換下一則。可在設定重新開啟與編輯金句。
  */
 export function PepTalkBanner() {
+  const { state, ready } = useDailyStore();
   const text = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const quotes = state.settings.pepTalk.quotes;
+  const pool = useMemo(() => resolvePepTalks(quotes), [quotes]);
+  const poolSignature = useMemo(() => pool.join("\0"), [pool]);
+  const visible = ready && state.settings.pepTalk.visible && pool.length > 0;
+
+  useEffect(() => {
+    activePool = pool;
+
+    if (!visible) {
+      window.clearInterval(timer);
+      timer = undefined;
+      return;
+    }
+
+    if (current === null || poolSignature !== poolKey || !pool.includes(current)) {
+      poolKey = poolSignature;
+      rotate(pool);
+    }
+    schedule(pool);
+
+    return () => {
+      window.clearInterval(timer);
+      timer = undefined;
+    };
+  }, [visible, pool, poolSignature]);
+
+  if (!visible || !text) return null;
 
   return (
-    // 固定最小高度：句子還沒抽出來時不會撐開版面，換句時也不會跳動。
-    <div className="flex min-h-10 items-center justify-center">
-      {text ? (
+    <div
+      role="status"
+      className="sticky top-0 z-[60] w-full border-b border-brand/20 bg-brand-tint pt-[env(safe-area-inset-top,0px)] shadow-[0_2px_10px_rgba(17,24,39,0.06)]"
+    >
+      <div className="relative flex min-h-10 w-full items-center justify-center px-3 py-2 sm:px-4">
+        <button
+          type="button"
+          aria-label="隱藏打氣小語"
+          title="隱藏（可在設定重新開啟）"
+          onClick={() => setPepTalkVisible(false)}
+          className="absolute top-1/2 left-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-lg leading-none text-brand-strong transition-colors hover:bg-brand/15 sm:left-3"
+        >
+          <span aria-hidden>☀</span>
+        </button>
+
         <button
           type="button"
           aria-label="換一則打氣小語"
           onClick={() => {
-            rotate();
-            schedule();
+            rotate(activePool);
+            schedule(activePool);
           }}
-          className="max-w-full rounded-full bg-brand-tint px-4 py-1.5 transition-colors hover:bg-brand-tint/70"
+          className="w-full rounded-lg px-10 py-0.5 text-center transition-colors hover:bg-brand/10 sm:px-12"
         >
-          {/* key 換掉就重新播放淡入動畫，不用自己管淡出淡入的計時器。 */}
           <span
             key={text}
-            className="pep-fade-in flex items-center gap-2 text-[13px] font-medium text-brand-strong"
+            className={cn(
+              "pep-fade-in block text-[13px] leading-snug font-medium text-brand-strong sm:text-sm",
+            )}
           >
-            <span aria-hidden>☀</span>
-            <span className="truncate">{text}</span>
+            {text}
           </span>
         </button>
-      ) : null}
+      </div>
     </div>
   );
 }

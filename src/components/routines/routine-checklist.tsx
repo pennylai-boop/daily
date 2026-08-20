@@ -3,14 +3,16 @@
 import Link from "next/link";
 
 import { CheckIcon, ChevronRightIcon } from "@/components/icons";
-import { RoutineCheckGrid } from "@/components/routines/check-grid";
 import { cn } from "@/components/ui/cn";
 import { describeFrequency } from "@/lib/routines";
 import { getTemplate } from "@/lib/templates";
 import type { IsoDate, Routine } from "@/lib/types";
 
-const ROW_BASE = "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors";
-
+/**
+ * 今日定期目標清單：一律三欄並排（容器夠寬時），書寫型連到紀錄頁、其餘直接打勾。
+ *
+ * 欄數用容器查詢：日曆側欄窄時退回兩欄，紀錄頁寬欄可維持三欄。
+ */
 export function RoutineChecklist({
   routines,
   checkedIds,
@@ -22,84 +24,83 @@ export function RoutineChecklist({
   date: IsoDate;
   onToggle: (routineId: string, date: IsoDate) => void;
 }) {
-  // 需要書寫的事項不在這裡打勾，改為導到當天的編輯頁填寫內容，所以各佔一列並帶箭頭；
-  // 只打勾的事項沒有下一步，交給 RoutineCheckGrid 並排，這張卡片才不會被拉得很長。
-  const writing = routines.filter((routine) => routine.template);
-  const checkOnly = routines.filter((routine) => !routine.template);
+  if (routines.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      {writing.length > 0 ? (
-        <ul className="space-y-1.5">
-          {writing.map((routine) => {
-            const checked = checkedIds.includes(routine.id);
+    <div className="@container">
+      <ul className="grid grid-cols-2 gap-2 @3xs:grid-cols-3">
+        {routines.map((routine) => {
+          const checked = checkedIds.includes(routine.id);
+          const writing = Boolean(routine.template);
+          const meta = writing && routine.template ? getTemplate(routine.template) : null;
+          const detail = [
+            meta && meta.name !== routine.title ? meta.name : null,
+            describeFrequency(routine.frequency),
+            routine.note || null,
+          ]
+            .filter(Boolean)
+            .join("・");
 
-            return (
-              <li key={routine.id}>
-                <Link
-                  href={`/entry/${date}`}
+          const className = cn(
+            "flex min-h-11 w-full flex-col items-start gap-1 rounded-xl border px-2 py-1.5 text-left transition-colors @sm:flex-row @sm:items-center @sm:gap-1.5",
+            checked
+              ? "border-accent/40 bg-accent-tint font-medium text-accent"
+              : "border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-muted",
+          );
+
+          const body = (
+            <>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span
+                  aria-hidden
                   className={cn(
-                    ROW_BASE,
+                    "flex size-5 items-center justify-center rounded-md border transition-colors",
                     checked
-                      ? "border-accent/40 bg-accent-tint"
-                      : "border-line bg-surface hover:border-line-strong hover:bg-surface-muted",
+                      ? "border-accent bg-accent text-on-accent"
+                      : "border-line-strong bg-surface",
                   )}
                 >
-                  <StatusDot checked={checked} />
-                  <RoutineLabel routine={routine} checked={checked} />
-                  <ChevronRightIcon className="size-4 shrink-0 text-ink-subtle" />
+                  {checked ? <CheckIcon className="size-3.5" strokeWidth={2.6} /> : null}
+                </span>
+                <span aria-hidden className="text-[15px]">
+                  {routine.emoji}
+                </span>
+              </span>
+              <span className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-tight break-words">
+                {routine.title}
+              </span>
+              {writing ? (
+                <ChevronRightIcon className="hidden size-3.5 shrink-0 text-ink-subtle @sm:block" />
+              ) : null}
+            </>
+          );
+
+          return (
+            <li key={routine.id}>
+              {writing ? (
+                <Link
+                  href={`/entry/${date}`}
+                  title={detail ? `${routine.title}・${detail}` : routine.title}
+                  className={className}
+                >
+                  {body}
                 </Link>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-
-      {checkOnly.length > 0 ? (
-        <RoutineCheckGrid
-          routines={checkOnly}
-          checkedIds={checkedIds}
-          onToggle={(routine) => onToggle(routine.id, date)}
-        />
-      ) : null}
+              ) : (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  title={detail ? `${routine.title}・${detail}` : routine.title}
+                  onClick={() => onToggle(routine.id, date)}
+                  className={className}
+                >
+                  {body}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
-  );
-}
-
-function StatusDot({ checked }: { checked: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-        checked ? "border-accent bg-accent text-on-accent" : "border-line-strong bg-surface",
-      )}
-    >
-      {checked ? <CheckIcon className="size-3.5" strokeWidth={2.6} /> : null}
-    </span>
-  );
-}
-
-function RoutineLabel({ routine, checked }: { routine: Routine; checked: boolean }) {
-  const meta = routine.template ? getTemplate(routine.template) : null;
-
-  return (
-    <>
-      <span aria-hidden className="text-base">
-        {routine.emoji}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn("block truncate text-sm font-medium", checked ? "text-accent" : "text-ink")}
-        >
-          {routine.title}
-        </span>
-        <span className="block truncate text-xs text-ink-subtle">
-          {meta ? `${meta.name}・` : ""}
-          {describeFrequency(routine.frequency)}
-          {routine.note ? `・${routine.note}` : ""}
-        </span>
-      </span>
-    </>
   );
 }

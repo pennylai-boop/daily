@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { formatFullDate } from "./date";
 import { findMood, type MoodOption } from "./moods";

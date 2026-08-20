@@ -3,13 +3,12 @@ import type { Metadata } from "next";
 import { LinkButton } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/surfaces";
 import { isPayuniConfigured } from "@/server/payuni";
-import { isSmilepayConfigured } from "@/server/smilepay-invoice";
 
 import { SupportScreen } from "./support-screen";
 
 export const metadata: Metadata = {
   title: "支持",
-  description: "用任意金額贊助天天 daily，付款由 PAYUNi 處理，發票由 SmilePay 開立。",
+  description: "用任意金額贊助天天 daily，付款由 PAYUNi 處理，成功後會寄感謝信。",
 };
 
 // 憑證是 Cloud Run 的執行期環境變數，不能在 build 時就把「已設定」的結果烤進靜態頁。
@@ -33,7 +32,7 @@ export default function Page() {
         </Card>
       </div>
 
-      <SupportScreen paymentReady={isPayuniConfigured()} invoiceReady={isSmilepayConfigured()} />
+      <SupportScreen paymentReady={isPayuniConfigured()} />
     </>
   );
 }

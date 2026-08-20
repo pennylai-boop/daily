@@ -2,13 +2,12 @@
  * PAYUNi 前景返回（ReturnURL）：付款頁結束後把使用者 form post 回這裡。
  *
  * 這裡只負責把結果整理成 query string 導去 /support/result 顯示；
- * 真正的入帳與開票以 NotifyURL 為準。
+ * 真正的入帳與感謝信以 NotifyURL 為準。
  */
 
 import { NextResponse } from "next/server";
 
 import { parsePayuniCallback, payuniConfig } from "@/server/payuni";
-import { getOrder } from "@/server/support-orders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,9 +38,6 @@ export async function POST(request: Request) {
   if (callback.payNo) target.searchParams.set("payNo", callback.payNo);
   if (callback.bankType) target.searchParams.set("bankType", callback.bankType);
   if (callback.expireDate) target.searchParams.set("expireDate", callback.expireDate);
-
-  const order = getOrder(callback.merTradeNo);
-  if (order?.invoiceNumber) target.searchParams.set("invoice", order.invoiceNumber);
 
   return NextResponse.redirect(target, 303);
 }

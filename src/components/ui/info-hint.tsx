@@ -67,7 +67,7 @@ export function InfoHint({
           <span
             role="tooltip"
             className={cn(
-              "fixed inset-x-3 bottom-[calc(64px+env(safe-area-inset-bottom)+12px)] z-50 block",
+              "fixed inset-x-3 bottom-[calc(66px+env(safe-area-inset-bottom)+12px)] z-50 block",
               "sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:bottom-auto sm:mt-2 sm:w-80",
             )}
           >

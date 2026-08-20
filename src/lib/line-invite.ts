@@ -12,6 +12,15 @@
 import { hasNativeShare, nativeShare } from "./native-bridge";
 
 interface LiffLike {
+  init: (config: { liffId: string }) => Promise<void>;
+  isLoggedIn: () => boolean;
+  login: (config?: { redirectUri?: string }) => void;
+  logout: () => void;
+  getProfile: () => Promise<{
+    userId: string;
+    displayName: string;
+    pictureUrl?: string;
+  }>;
   isApiAvailable: (name: string) => boolean;
   /** 使用者按取消時回傳 null。 */
   shareTargetPicker: (messages: unknown[]) => Promise<{ status: string } | null>;

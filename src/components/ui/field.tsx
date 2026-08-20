@@ -1,5 +1,8 @@
+"use client";
+
 import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 
+import { InfoHint } from "./info-hint";
 import { cn } from "./cn";
 
 // 手機一律 16px：iOS Safari 遇到小於 16px 的輸入框，對焦時會自動放大整個頁面。
@@ -23,16 +26,18 @@ export function Field({
   children,
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   htmlFor?: string;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-ink-muted">
-        {label}
-      </label>
-      {hint ? <p className="text-[13px] leading-relaxed text-ink-subtle">{hint}</p> : null}
+      <div className="flex min-w-0 items-center gap-1">
+        <label htmlFor={htmlFor} className="block text-sm font-medium text-ink-muted">
+          {label}
+        </label>
+        {hint ? <InfoHint label={`${label}的說明`}>{hint}</InfoHint> : null}
+      </div>
       {children}
     </div>
   );
