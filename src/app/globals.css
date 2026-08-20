@@ -132,18 +132,51 @@ body {
     overflow-wrap: anywhere;
   }
 
-  /* 打氣小語換句時的淡入，由 React 的 key 觸發重播（見 pep-talk-banner.tsx）。 */
-  @keyframes pep-fade-in {
+  /* 打氣小語跑馬燈：由右往左無限循環，換句時靠 React key 重播。 */
+  @keyframes pep-marquee {
     from {
-      opacity: 0;
+      transform: translateX(0);
     }
     to {
-      opacity: 1;
+      transform: translateX(-50%);
     }
   }
 
-  .pep-fade-in {
-    animation: pep-fade-in 260ms ease-out;
+  .pep-marquee-viewport {
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+  }
+
+  .pep-marquee-track {
+    display: inline-flex;
+    width: max-content;
+    align-items: center;
+    white-space: nowrap;
+    animation: pep-marquee linear infinite;
+    animation-duration: var(--pep-marquee-duration, 18s);
+  }
+
+  .pep-marquee-track > span {
+    flex: none;
+    padding-right: 4rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pep-marquee-viewport {
+      mask-image: none;
+    }
+
+    .pep-marquee-track {
+      display: block;
+      width: 100%;
+      animation: none;
+      white-space: normal;
+      text-align: center;
+    }
+
+    .pep-marquee-track > span:nth-child(n + 2) {
+      display: none;
+    }
   }
 
   .no-scrollbar::-webkit-scrollbar {
