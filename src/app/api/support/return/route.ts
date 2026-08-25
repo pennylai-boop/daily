@@ -1,20 +1,22 @@
 /**
  * PAYUNi 前景返回（ReturnURL）：付款頁結束後把使用者 form post 回這裡。
  *
- * 這裡只負責把結果整理成 query string 導去 /support/result 顯示；
- * 真正的入帳與感謝信以 NotifyURL 為準。
+ * 這裡只負責把結果整理成 query string 導去顯示頁；真正的入帳與寄信以 NotifyURL 為準。
+ * 贊助導去 /support/result，買點數導回 /divination（帶訂單編號讓它把點數接回來）。
  */
 
 import { NextResponse } from "next/server";
 
-import { parsePayuniCallback, payuniConfig } from "@/server/payuni";
+import { isPaid, parsePayuniCallback, payuniConfig } from "@/server/payuni";
+import { getOrder } from "@/server/support-orders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const config = payuniConfig();
-  const target = new URL("/support/result", new URL(request.url).origin);
+  const origin = new URL(request.url).origin;
+  const target = new URL("/support/result", origin);
 
   if (!config) {
     target.searchParams.set("status", "unconfigured");
@@ -27,6 +29,16 @@ export async function POST(request: Request) {
   if (!callback) {
     target.searchParams.set("status", "invalid");
     return NextResponse.redirect(target, 303);
+  }
+
+  // 點數付成功就回卜卦頁；沒付成功（取消、失敗）仍走 /support/result 說明原因。
+  if (isPaid(callback)) {
+    const order = await getOrder(callback.merTradeNo);
+    if (order?.product === "credits") {
+      const back = new URL("/divination", origin);
+      back.searchParams.set("paid", callback.merTradeNo);
+      return NextResponse.redirect(back, 303);
+    }
   }
 
   target.searchParams.set("status", callback.status);

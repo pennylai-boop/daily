@@ -570,7 +570,7 @@ export async function syncOnLogin(user: {
  * 用點數時真正的扣款已經由伺服器做完，這裡只把它回報的餘額抄下來顯示。
  */
 export function commitDivination(
-  input: Omit<DivinationRecord, "id" | "createdAt" | "paidWith">,
+  input: Omit<DivinationRecord, "id" | "createdAt" | "paidWith" | "note">,
   paid: { with: "free" } | { with: "credit"; remaining: number },
 ): void {
   const record: DivinationRecord = {
@@ -578,6 +578,7 @@ export function commitDivination(
     id: createId(),
     createdAt: new Date().toISOString(),
     paidWith: paid.with,
+    note: "",
   };
 
   commit((state) => ({
@@ -587,6 +588,22 @@ export function commitDivination(
       lastFreeCastAt: paid.with === "free" ? record.createdAt : state.divination.lastFreeCastAt,
       credits: paid.with === "credit" ? paid.remaining : state.divination.credits,
       history: [record, ...state.divination.history].slice(0, DIVINATION_HISTORY_LIMIT),
+    },
+  }));
+}
+
+/**
+ * 改一筆卜卦紀錄的附註。卦象與解讀是當時起出來的結果，不提供修改；
+ * 附註是使用者自己的欄位，事後回頭對照時就寫在這裡。
+ */
+export function setDivinationNote(id: string, note: string): void {
+  commit((current) => ({
+    ...current,
+    divination: {
+      ...current.divination,
+      history: current.divination.history.map((record) =>
+        record.id === id ? { ...record, note } : record,
+      ),
     },
   }));
 }
@@ -650,6 +667,7 @@ export interface DailyStore {
   refreshSharedJournals: typeof refreshSharedJournals;
   syncOnLogin: typeof syncOnLogin;
   commitDivination: typeof commitDivination;
+  setDivinationNote: typeof setDivinationNote;
   setDivinationCredits: typeof setDivinationCredits;
   clearDivinationCredits: typeof clearDivinationCredits;
   replaceState: typeof replaceState;
@@ -690,6 +708,7 @@ export function useDailyStore(): DailyStore {
     refreshSharedJournals,
     syncOnLogin,
     commitDivination,
+    setDivinationNote,
     setDivinationCredits,
     clearDivinationCredits,
     replaceState,

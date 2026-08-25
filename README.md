@@ -267,7 +267,7 @@ npm run dev
 「我了解了，開始卜卦」排在這幾張說明卡之後才出現——讀完才動手，是這一步存在的理由，
 按鈕夾在中間就會被跳過。
 
-**想問的事**可以打字，也可以按「語音輸入」用說的（`src/lib/speech.ts`、
+**想問的事**可以打字，也可以按輸入框右上角的麥克風用說的（`src/lib/speech.ts`、
 `src/components/voice-input-button.tsx`）。Web Speech API 只有 Chrome／Edge／Safari 支援，
 不支援的瀏覽器整顆按鈕不出現——留一顆按了沒反應的鈕比沒有更糟。下面另外給三個範例問句可以直接套用。
 
@@ -286,7 +286,15 @@ API 比動畫快也會等它畫完。
 
 卦的效期大約三個月，免費額度就照同一個節奏：**每三個月一次免費**，同一輪裡想再問要用點數
 （規則在 `src/lib/divination-quota.ts`，狀態存在 `DailyState.divination`）。額度只在 AI 解讀成功
-之後才扣，起卦失敗或解讀失敗不算。額度用完時仍然看得到上一次問的問題與解讀。
+之後才扣，起卦失敗或解讀失敗不算。額度用完時仍然看得到過去的紀錄。
+
+#### 卜卦紀錄
+
+過去的卦排成一張表（日期／問的事／卦象／附註），可以搜尋，展開才看得到完整解讀。
+**卦象與 AI 解讀一律唯讀**——那是當時起出來的結果，能改就沒有對照的價值了。
+唯一可編輯的是**附註**（`DivinationRecord.note`，store 動作 `setDivinationNote`）：
+說明卡叫人「事後回頭對照」，就得有地方寫下當時的解讀與後來的發展，否則那句話只是空話。
+歷史只留最近 `DIVINATION_HISTORY_LIMIT` 筆，解讀是整段文字，全部留著會把 localStorage 吃掉。
 
 #### 點數與兌換碼（`/divination/credits`）
 
@@ -300,8 +308,12 @@ LINE 登入目前只在 LINE App 內有效（`src/lib/line-auth.ts`），瀏覽�
    **金額一律由伺服器依方案算，不看前端傳來的數字。**
 2. 付款成功後 Notify 開發票、發一組 12 位兌換碼並寄到信箱（`src/server/credit-codes.ts`）。
    一筆訂單只發一組，Notify 被重送也不會多給點數。
-3. 使用者在 `/divination/credits` 輸入兌換碼，`/api/divination/credits` 查到餘額後記在本機。
-4. 用點數起卦時把碼一起送去 `/api/divination`，**扣點在伺服器做**，前端動不了餘額。
+3. 付款完成回到站上時**自動接回**：`/api/support/return` 認出這是點數訂單就導去
+   `/divination?paid=<訂單編號>`，頁面拿編號問 `/api/divination/credits/claim` 換到兌換碼與餘額，
+   直接寫進本機。前景返回常比 Notify 早到，所以查不到碼時回 202，前端每 2 秒重試、最多 6 次。
+   訂單編號等於一次性的領取憑據，因此只在付款後 30 分鐘內可領，過期就請使用者用信件裡的碼。
+4. 手動接回：在 `/divination/credits` 輸入兌換碼，`/api/divination/credits` 查到餘額後記在本機。
+5. 用點數起卦時把碼一起送去 `/api/divination`，**扣點在伺服器做**，前端動不了餘額。
    扣款排在 AI 解讀成功之後：解讀失敗還扣一點等於收了錢沒給東西。
 
 這樣換手機或清掉瀏覽器資料之後，重新輸入信件裡的同一組碼就能接回剩下的點數。
@@ -311,6 +323,10 @@ LINE 登入目前只在 LINE App 內有效（`src/lib/line-auth.ts`），瀏覽�
 剩餘點數常駐在手機版右上角與桌機側欄（`src/components/points-badge.tsx`），一點卜一次。
 只有跟卜卦有過關係的人才看得到它——綁過兌換碼、有點數，或卜過卦；
 從來不用卜卦的人不需要在每一頁看到一個餘額。
+
+免費額度用完時，五檔方案就直接排在卜卦頁上（`src/components/credit-pack-card.tsx` 兩邊共用），
+填信箱、選一檔就走去 PAYUNi，不必先繞到儲值頁——那一步只是多一次點擊和一次跳頁。
+這條捷徑固定走信用卡與雲端發票；ATM／超商、其他發票形式與兌換碼補接都留在 `/divination/credits`。
 
 **價格在 `src/lib/divination-credits.ts` 的 `CREDIT_PACKS`，要調整只改那一份。**
 買得越多每點越便宜，「最划算」的標記由 `BEST_VALUE_PACK_ID` 依單價自己算出來，不用手動標。

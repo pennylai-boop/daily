@@ -244,6 +244,11 @@ export interface DivinationRecord {
   createdAt: string;
   /** 這一卦是用免費額度還是點數換的。 */
   paidWith: "free" | "credit";
+  /**
+   * 自己加的附註：當時怎麼讀這一卦、後來實際發生什麼。
+   * 卦象與 AI 解讀都不可改，只有這一欄是使用者的。
+   */
+  note: string;
 }
 
 /**

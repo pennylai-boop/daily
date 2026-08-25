@@ -34,8 +34,9 @@ export const THEME_KEY = "daily.theme";
  * 9：LINE 從自動推送改成手動選對象，群組 ID 與傳送時機不再使用。
  * 10：卜卦的免費額度、點數與歷史紀錄。
  * 11：定期事項加上 updatedAt，登入同步到 Supabase 時用來判斷本機／雲端哪一份較新。
+ * 12：卜卦紀錄可以自己加附註。
  */
-export const STORE_VERSION = 11;
+export const STORE_VERSION = 12;
 
 /** 卜卦：三個月一輪的免費額度，還沒卜過的人第一次就是免費。 */
 export const EMPTY_DIVINATION: DivinationState = {
@@ -179,6 +180,7 @@ function normalizeDivinationRecord(value: unknown): DivinationRecord | null {
     analysis,
     createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
     paidWith: value.paidWith === "credit" ? "credit" : "free",
+    note: typeof value.note === "string" ? value.note : "",
   };
 }
 

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { isPayuniConfigured } from "@/server/payuni";
+
 import { DivinationScreen } from "./divination-screen";
 
 export const metadata: Metadata = {
@@ -8,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <DivinationScreen />;
+  return <DivinationScreen paymentReady={isPayuniConfigured()} />;
 }

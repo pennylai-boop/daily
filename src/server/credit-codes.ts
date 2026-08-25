@@ -63,6 +63,27 @@ export async function issueCreditCode(params: {
   return { code: data.code as string, alreadyIssued: false };
 }
 
+/**
+ * 用訂單編號找出已經發出的兌換碼。付款完成導回站上時用它把點數直接接到裝置上，
+ * 使用者才不必先去信箱翻兌換碼。Notify 還沒進來時查不到，回 null 讓呼叫端稍後再試。
+ */
+export async function getCreditCodeByOrder(merTradeNo: string): Promise<string | null> {
+  const db = getSupabaseAdmin();
+
+  const { data, error } = await db
+    .from("divination_credit_codes")
+    .select("code")
+    .eq("mer_trade_no", merTradeNo)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[credit-codes] 查訂單 ${merTradeNo} 的兌換碼失敗：`, error.message);
+    return null;
+  }
+
+  return (data?.code as string | undefined) ?? null;
+}
+
 export type BalanceResult =
   | { ok: true; balance: CreditBalance }
   | { ok: false; reason: "not-found" | "error" };
