@@ -1,14 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" rx="14" fill="#e86e2c" />
-  <circle cx="32" cy="32" r="9.5" fill="#ffffff" />
-  <g stroke="#ffffff" stroke-width="4" stroke-linecap="round">
-    <path d="M32 11v4.5" />
-    <path d="M32 53v-4.5" />
-    <path d="M11 32h4.5" />
-    <path d="M53 32h-4.5" />
-    <path d="M17.2 17.2l3.2 3.2" />
-    <path d="M46.8 46.8l-3.2-3.2" />
-    <path d="M46.8 17.2l-3.2 3.2" />
-    <path d="M17.2 46.8l3.2-3.2" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 與側欄品牌標記相同：橘底圓角方塊＋白色實心太陽 -->
+  <rect width="64" height="64" rx="14" fill="#e86e2c"/>
+  <g
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    transform="translate(32 32) scale(1.63) translate(-12 -12)"
+  >
+    <circle cx="12" cy="12" r="4.1" fill="#ffffff"/>
+    <path d="M12 2.2v2.1M12 19.7v2.1M2.2 12h2.1M19.7 12h2.1M5.1 5.1l1.5 1.5M17.4 17.4l1.5 1.5M18.9 5.1l-1.5 1.5M6.6 17.4l-1.5 1.5"/>
   </g>
 </svg>

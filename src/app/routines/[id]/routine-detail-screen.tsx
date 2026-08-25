@@ -32,9 +32,11 @@ import {
 import { describeFrequency, isRoutineDueOn } from "@/lib/routines";
 import {
   buildRangeWindow,
+  metricSeries,
   RANGE_OPTIONS,
   routineRateSeries,
   routineWordSeries,
+  timerMinutesSeries,
   type RangeId,
 } from "@/lib/series";
 import {
@@ -188,7 +190,7 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
               </span>
               沒有排定
             </p>
-            {template ? (
+            {template?.kind === "writing" ? (
               <p className="pt-0.5 text-xs text-ink-subtle">數字是當天寫的字數。</p>
             ) : null}
           </div>
@@ -217,7 +219,7 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
               today={today}
               state={state}
               routine={routine}
-              showWords={template !== null}
+              showWords={template?.kind === "writing"}
             />
           ))}
         </div>
@@ -239,7 +241,7 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
         </div>
       </Card>
 
-      {template ? (
+      {template?.kind === "writing" ? (
         <Card className="px-4 py-4 sm:px-5">
           <SectionHeading title="書寫量" description={`${rangeLabel}內這個事項寫下的字數`} />
           <div className="mt-4">
@@ -248,6 +250,34 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
               series={routineWordSeries(state, window.buckets, routine)}
               formatValue={(value) => `${Math.round(value)} 字`}
               emptyHint="這段期間還沒有寫下內容。"
+            />
+          </div>
+        </Card>
+      ) : null}
+
+      {routine.template === "timer" ? (
+        <Card className="px-4 py-4 sm:px-5">
+          <SectionHeading title="計時分鐘" description={`${rangeLabel}內累積的分鐘數`} />
+          <div className="mt-4">
+            <LineChart
+              labels={window.buckets.map((bucket) => bucket.label)}
+              series={timerMinutesSeries(state, window.buckets, routine)}
+              formatValue={(value) => `${Math.round(value * 10) / 10} 分`}
+              emptyHint="這段期間還沒有計時紀錄。"
+            />
+          </div>
+        </Card>
+      ) : null}
+
+      {routine.template === "metric" ? (
+        <Card className="px-4 py-4 sm:px-5">
+          <SectionHeading title="紀錄數值" description={`${rangeLabel}內各項目的變化`} />
+          <div className="mt-4">
+            <LineChart
+              labels={window.buckets.map((bucket) => bucket.label)}
+              series={metricSeries(state, window.buckets, routine)}
+              formatValue={(value) => String(Math.round(value * 100) / 100)}
+              emptyHint="這段期間還沒有填寫紀錄。"
             />
           </div>
         </Card>

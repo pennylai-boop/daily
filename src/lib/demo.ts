@@ -246,7 +246,6 @@ export function buildDemoState(): DailyState {
     checks,
     weekGoals: {},
     monthGoals: {},
-    focusQueue: [],
     settings: buildDemoSettings(),
     sharedWithMe: buildDemoSharedJournals(),
   };

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { HabitHeatmaps } from "@/components/insights/habit-heatmaps";
 import { PeriodGoalsStatus } from "@/components/insights/period-goals-status";
 import { LineChart } from "@/components/charts/line-chart";
 import { RangeTabs } from "@/components/ui/range-tabs";
@@ -17,8 +16,11 @@ import {
 import { todayIso } from "@/lib/date";
 import {
   buildRangeWindow,
+  metricSeries,
   moodSeries,
   RANGE_OPTIONS,
+  routineRateSeries,
+  timerMinutesSeries,
   type RangeId,
 } from "@/lib/series";
 import {
@@ -63,7 +65,7 @@ export function InsightsScreen() {
           <EmptyState
             emoji="📈"
             title="還沒有可以回顧的內容"
-            description="寫下第一篇紀錄或設定定期事項後，這裡會出現完成格線與心情趨勢。"
+            description="寫下第一篇紀錄或設定定期事項後，這裡會出現完成率與心情趨勢。"
             action={<TextLink href={`/entry/${today}`}>開始記錄今天 →</TextLink>}
           />
         </Card>
@@ -72,6 +74,7 @@ export function InsightsScreen() {
   }
 
   const window = buildRangeWindow(state, range);
+  const activeRoutines = state.routines.filter((routine) => !routine.archived);
   const rangeLabel = RANGE_OPTIONS.find((option) => option.id === range)?.label ?? "";
 
   return (
@@ -85,23 +88,78 @@ export function InsightsScreen() {
         <StatTile label="書寫段落" value={totalWrittenBlocks(state)} unit="段" />
       </div>
 
-      <HabitHeatmaps state={state} today={today} />
+      <RangeTabs
+        options={RANGE_OPTIONS}
+        value={range}
+        onChange={setRange}
+        ariaLabel="統計區間"
+      />
+
+      <Card className="px-4 py-4 sm:px-5">
+        <SectionHeading
+          title="定期事項完成率比較"
+          description={`${rangeLabel}內每個事項的完成率，只計算該做的日子`}
+        />
+        <div className="mt-4">
+          <LineChart
+            labels={window.buckets.map((bucket) => bucket.label)}
+            series={routineRateSeries(state, window.buckets, activeRoutines)}
+            yMax={100}
+            yTicks={4}
+            formatValue={(value) => `${Math.round(value)}%`}
+            emptyHint="這段期間沒有排定的定期事項。"
+          />
+        </div>
+      </Card>
 
       <PeriodGoalsStatus state={state} today={today} />
 
+      {activeRoutines
+        .filter((routine) => routine.template === "timer")
+        .map((routine) => (
+          <Card key={routine.id} className="px-4 py-4 sm:px-5">
+            <SectionHeading
+              title={`${routine.emoji} ${routine.title}`}
+              description={`${rangeLabel}的計時分鐘`}
+            />
+            <div className="mt-4">
+              <LineChart
+                labels={window.buckets.map((bucket) => bucket.label)}
+                series={timerMinutesSeries(state, window.buckets, routine)}
+                formatValue={(value) => `${Math.round(value * 10) / 10} 分`}
+                emptyHint="這段期間還沒有計時紀錄。"
+              />
+            </div>
+          </Card>
+        ))}
+
+      {activeRoutines
+        .filter((routine) => routine.template === "metric")
+        .map((routine) => {
+          const series = metricSeries(state, window.buckets, routine);
+          return (
+            <Card key={routine.id} className="px-4 py-4 sm:px-5">
+              <SectionHeading
+                title={`${routine.emoji} ${routine.title}`}
+                description={`${rangeLabel}的數值變化`}
+              />
+              <div className="mt-4">
+                <LineChart
+                  labels={window.buckets.map((bucket) => bucket.label)}
+                  series={series}
+                  formatValue={(value) => String(Math.round(value * 100) / 100)}
+                  emptyHint="這段期間還沒有填寫紀錄。"
+                />
+              </div>
+            </Card>
+          );
+        })}
+
       <Card className="px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <SectionHeading
-            title="心情趨勢"
-            description={`${rangeLabel}的心情平均分數，5 分最愉快`}
-          />
-          <RangeTabs
-            options={RANGE_OPTIONS}
-            value={range}
-            onChange={setRange}
-            ariaLabel="心情統計區間"
-          />
-        </div>
+        <SectionHeading
+          title="心情趨勢"
+          description={`${rangeLabel}的心情平均分數，5 分最愉快`}
+        />
         <div className="mt-4">
           <LineChart
             labels={window.buckets.map((bucket) => bucket.label)}

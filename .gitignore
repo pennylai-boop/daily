@@ -26,6 +26,8 @@
 # misc
 .DS_Store
 *.pem
+# 整理資料時的中繼檔，不進版控
+*.tmp.txt
 
 # debug
 npm-debug.log*

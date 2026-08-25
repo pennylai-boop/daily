@@ -59,14 +59,14 @@ function parseInput(body: unknown): SponsorInput {
     ...base,
     amount: Math.trunc(Number(raw.amount ?? 0)),
     method: coerceMethod(raw.method),
-    name: text(raw.name),
-    email: text(raw.email),
-    message: text(raw.message),
+    name: text(raw.name, 40),
+    email: text(raw.email, 80),
+    message: text(raw.message, 600),
   };
 }
 
-function text(value: unknown): string {
-  return typeof value === "string" ? value.slice(0, 200) : "";
+function text(value: unknown, max: number): string {
+  return typeof value === "string" ? value.slice(0, max) : "";
 }
 
 function coerceMethod(value: unknown): SponsorInput["method"] {

@@ -23,9 +23,9 @@ export default function AppleIcon() {
       >
         <div
           style={{
-            width: 62,
-            height: 62,
-            borderRadius: 62,
+            width: 68,
+            height: 68,
+            borderRadius: 68,
             background: PAPER,
           }}
         />
@@ -34,11 +34,11 @@ export default function AppleIcon() {
             key={angle}
             style={{
               position: "absolute",
-              width: 13,
-              height: 22,
-              borderRadius: 13,
+              width: 14,
+              height: 24,
+              borderRadius: 14,
               background: PAPER,
-              transform: `rotate(${angle}deg) translateY(-52px)`,
+              transform: `rotate(${angle}deg) translateY(-56px)`,
             }}
           />
         ))}

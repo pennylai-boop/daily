@@ -38,7 +38,7 @@ export interface CustomMood {
   createdAt: string;
 }
 
-export type TemplateId = "diary" | "gratitude" | "mindfulness";
+export type TemplateId = "diary" | "gratitude" | "mindfulness" | "timer" | "metric";
 
 export interface DiaryContent {
   title: string;
@@ -66,10 +66,45 @@ export interface MindfulnessContent {
   items: MindfulnessItem[];
 }
 
+/** 碼表累積時間，或番茄鐘倒數。秒數寫在當天的內容裡，回顧用來畫曲線。 */
+export type TimerMode = "stopwatch" | "pomodoro";
+
+export interface TimerDefaults {
+  mode: TimerMode;
+  pomodoroMinutes: number;
+}
+
+export const DEFAULT_TIMER: TimerDefaults = { mode: "stopwatch", pomodoroMinutes: 25 };
+
+export interface TimerContent {
+  mode: TimerMode;
+  /** 今天已記入的秒數（不含目前還在跑的那一段）。 */
+  totalSeconds: number;
+  /** 正在計時時為開始當下的 ISO；暫停或未開始為 null。 */
+  runningStartedAt: string | null;
+  pomodoroMinutes: number;
+  pomodoroDone: number;
+}
+
+/** 紀錄格式在建立事項時就定好的欄位，例如體重、腰圍。 */
+export interface MetricFieldDef {
+  id: string;
+  label: string;
+  unit: string;
+}
+
+export interface MetricContent {
+  fields: MetricFieldDef[];
+  /** 欄位 id → 數字字串，方便輸入過程保留小數點。 */
+  values: Record<string, string>;
+}
+
 export type BlockContent =
   | { template: "diary"; data: DiaryContent }
   | { template: "gratitude"; data: GratitudeContent }
-  | { template: "mindfulness"; data: MindfulnessContent };
+  | { template: "mindfulness"; data: MindfulnessContent }
+  | { template: "timer"; data: TimerContent }
+  | { template: "metric"; data: MetricContent };
 
 /**
  * 書寫內容一律掛在某個定期事項底下（`routineId`）。
@@ -118,6 +153,10 @@ export interface Routine {
   note: string;
   frequency: RoutineFrequency;
   template: TemplateId | null;
+  /** 紀錄格式的欄位；其他格式忽略。 */
+  metricFields?: MetricFieldDef[];
+  /** 計時格式的預設；其他格式忽略。 */
+  timerDefaults?: TimerDefaults;
   archived: boolean;
   createdAt: string;
 }
@@ -193,17 +232,6 @@ export interface SharedJournal {
 }
 
 /**
- * 專注模式的計時項目。順序就是執行順序。
- */
-export interface FocusTimerTask {
-  id: string;
-  title: string;
-  emoji: string;
-  /** 分鐘，至少 1。 */
-  durationMinutes: number;
-}
-
-/**
  * 週／月目標條列，形狀與每日目標相同。
  * 週以該週週一（`startOfWeek`）的 ISO 當 key；月以 `YYYY-MM` 當 key。
  */
@@ -221,8 +249,6 @@ export interface DailyState {
   weekGoals: PeriodGoalMap;
   /** 本月目標，key = `YYYY-MM`。 */
   monthGoals: PeriodGoalMap;
-  /** 專注模式的計時佇列。 */
-  focusQueue: FocusTimerTask[];
   settings: AppSettings;
   sharedWithMe: SharedJournal[];
 }

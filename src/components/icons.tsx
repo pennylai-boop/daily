@@ -21,7 +21,7 @@ function Icon({ children, ...props }: IconProps) {
 
 export function SunIcon(props: IconProps) {
   return (
-    <Icon {...props}>
+    <Icon {...props} fill="none" stroke="currentColor">
       <circle cx="12" cy="12" r="4.1" fill="currentColor" />
       <path d="M12 2.2v2.1M12 19.7v2.1M2.2 12h2.1M19.7 12h2.1M5.1 5.1l1.5 1.5M17.4 17.4l1.5 1.5M18.9 5.1l-1.5 1.5M6.6 17.4l-1.5 1.5" />
     </Icon>

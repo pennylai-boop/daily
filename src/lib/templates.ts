@@ -1,12 +1,6 @@
 import { createId } from "./storage";
-import type {
-  BlockContent,
-  EntryBlock,
-  MindfulnessChannel,
-  MindfulnessItem,
-  MindfulnessMark,
-  TemplateId,
-} from "./types";
+import type { BlockContent, EntryBlock, MetricFieldDef, MindfulnessChannel, MindfulnessItem, MindfulnessMark, TemplateId, TimerDefaults } from "./types";
+import { DEFAULT_TIMER } from "./types";
 
 export interface TemplateMeta {
   id: TemplateId;
@@ -14,6 +8,8 @@ export interface TemplateMeta {
   name: string;
   tagline: string;
   description: string;
+  /** writing：字數；measure：回顧畫數值曲線。 */
+  kind: "writing" | "measure";
 }
 
 export const TEMPLATES: TemplateMeta[] = [
@@ -23,6 +19,7 @@ export const TEMPLATES: TemplateMeta[] = [
     name: "日記",
     tagline: "自由書寫",
     description: "不設限地寫下今天發生的事、想到的念頭。",
+    kind: "writing",
   },
   {
     id: "gratitude",
@@ -30,6 +27,7 @@ export const TEMPLATES: TemplateMeta[] = [
     name: "五感恩",
     tagline: "五件值得感謝的事",
     description: "列出五件今天讓你心生感謝的人、事、物。",
+    kind: "writing",
   },
   {
     id: "mindfulness",
@@ -38,6 +36,23 @@ export const TEMPLATES: TemplateMeta[] = [
     name: "觀心書",
     tagline: "身・口・意",
     description: "在身、口、意底下記做得好的、要調整的，以及接下來要練習的。",
+    kind: "writing",
+  },
+  {
+    id: "timer",
+    emoji: "⏱",
+    name: "計時",
+    tagline: "碼表或番茄鐘",
+    description: "按下就開始計時，可當工作／放鬆碼表，也可設定番茄鐘。",
+    kind: "measure",
+  },
+  {
+    id: "metric",
+    emoji: "📏",
+    name: "紀錄",
+    tagline: "固定項目數值",
+    description: "建立時先寫好要記的項目，例如體重、腰圍、喝水次數。",
+    kind: "measure",
   },
 ];
 
@@ -87,7 +102,10 @@ export function createMindfulnessItem(
   return { id: createId(), channel, mark, text: "" };
 }
 
-export function createEmptyContent(template: TemplateId): BlockContent {
+export function createEmptyContent(
+  template: TemplateId,
+  extras?: { metricFields?: MetricFieldDef[]; timerDefaults?: TimerDefaults },
+): BlockContent {
   switch (template) {
     case "diary":
       return { template: "diary", data: { title: "", body: "" } };
@@ -98,6 +116,27 @@ export function createEmptyContent(template: TemplateId): BlockContent {
       };
     case "mindfulness":
       return { template: "mindfulness", data: { items: [] } };
+    case "timer": {
+      const defaults = extras?.timerDefaults ?? DEFAULT_TIMER;
+      return {
+        template: "timer",
+        data: {
+          mode: defaults.mode,
+          totalSeconds: 0,
+          runningStartedAt: null,
+          pomodoroMinutes: defaults.pomodoroMinutes,
+          pomodoroDone: 0,
+        },
+      };
+    }
+    case "metric":
+      return {
+        template: "metric",
+        data: {
+          fields: (extras?.metricFields ?? []).filter((field) => field.label.trim()),
+          values: {},
+        },
+      };
   }
 }
 
@@ -109,7 +148,34 @@ export function isBlockEmpty(block: EntryBlock): boolean {
       return block.data.items.every((item) => !item.trim());
     case "mindfulness":
       return block.data.items.every((item) => !item.text.trim());
+    case "timer":
+      return timerElapsedSeconds(block.data) <= 0 && block.data.pomodoroDone <= 0;
+    case "metric":
+      return !Object.values(block.data.values).some((value) => value.trim().length > 0);
   }
+}
+
+export function timerElapsedSeconds(data: Extract<EntryBlock, { template: "timer" }>["data"], now = Date.now()) {
+  const running = data.runningStartedAt ? Math.max(0, Math.floor((now - Date.parse(data.runningStartedAt)) / 1000)) : 0;
+  return data.totalSeconds + running;
+}
+
+export function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+export function parseMetricNumber(value: string): number | null {
+  const trimmed = value.trim().replace(/,/g, "");
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** 取一段純文字摘要，用於清單與日曆的預覽。 */
@@ -127,6 +193,23 @@ export function summarizeBlock(block: EntryBlock): string {
         .map((item) => item.text.trim())
         .filter(Boolean)
         .join("、");
+    case "timer": {
+      const seconds = timerElapsedSeconds(block.data);
+      const parts = [seconds > 0 ? formatDuration(seconds) : ""];
+      if (block.data.mode === "pomodoro" && block.data.pomodoroDone > 0) {
+        parts.push(`${block.data.pomodoroDone} 顆番茄`);
+      }
+      return parts.filter(Boolean).join("・");
+    }
+    case "metric":
+      return block.data.fields
+        .map((field) => {
+          const value = block.data.values[field.id]?.trim();
+          if (!value) return "";
+          return `${field.label} ${value}${field.unit ? ` ${field.unit}` : ""}`;
+        })
+        .filter(Boolean)
+        .join("、");
   }
 }
 
@@ -139,5 +222,6 @@ export function groupMindfulnessItems(items: MindfulnessItem[]) {
 }
 
 export function countWords(block: EntryBlock): number {
+  if (block.template === "timer" || block.template === "metric") return 0;
   return summarizeBlock(block).replace(/\s+/g, "").length;
 }

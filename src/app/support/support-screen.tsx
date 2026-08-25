@@ -5,7 +5,7 @@ import { useState } from "react";
 import { HeartIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
-import { Field, TextInput } from "@/components/ui/field";
+import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { InfoHint } from "@/components/ui/info-hint";
 import { Segmented } from "@/components/ui/segmented";
 import { Card, PageHeading, SectionHeading } from "@/components/ui/surfaces";
@@ -17,6 +17,8 @@ import {
   hasErrors,
   PRESET_AMOUNTS,
   SPONSOR_METHODS,
+  MESSAGE_MAX,
+  validateFeedback,
   validateSponsor,
   type SponsorErrors,
   type SponsorInput,
@@ -33,7 +35,7 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
   const [amountText, setAmountText] = useState(String(createSponsorInput().amount));
   const [errors, setErrors] = useState<SponsorErrors>({});
   const [notice, setNotice] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"pay" | "note" | null>(null);
 
   const method = getMethod(input.method);
   const patch = (next: Partial<SponsorInput>) => setInput((current) => ({ ...current, ...next }));
@@ -54,7 +56,7 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
     setNotice(null);
     if (hasErrors(nextErrors)) return;
 
-    setPending(true);
+    setPending("pay");
     try {
       const response = await fetch("/api/support/checkout", {
         method: "POST",
@@ -71,7 +73,7 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
       if (!response.ok || !data.action || !data.fields) {
         if (data.errors) setErrors(data.errors);
         setNotice(data.error ?? "建立贊助訂單失敗，請稍後再試。");
-        setPending(false);
+        setPending(null);
         return;
       }
 
@@ -79,7 +81,44 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
       postToGateway(data.action, data.fields);
     } catch {
       setNotice("連線失敗，請確認網路後再試一次。");
-      setPending(false);
+      setPending(null);
+    }
+  };
+
+  const submitFeedback = async () => {
+    if (blockedInApp) return;
+
+    const nextErrors = validateFeedback(input);
+    setErrors(nextErrors);
+    setNotice(null);
+    if (hasErrors(nextErrors)) return;
+
+    setPending("note");
+    try {
+      const response = await fetch("/api/support/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: input.name,
+          email: input.email,
+          message: input.message,
+        }),
+      });
+      const data = (await response.json()) as { error?: string; errors?: SponsorErrors };
+
+      if (!response.ok) {
+        if (data.errors) setErrors(data.errors);
+        setNotice(data.error ?? "留言送出失敗，請稍後再試。");
+        setPending(null);
+        return;
+      }
+
+      setNotice("謝謝你的建議，我們已收到。");
+      patch({ message: "" });
+      setPending(null);
+    } catch {
+      setNotice("連線失敗，請確認網路後再試一次。");
+      setPending(null);
     }
   };
 
@@ -166,10 +205,10 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading
           title="聯絡與留言"
-          description="信箱必填，付款成功後會自動寄感謝信。稱呼與留言為選填。"
+          description="沒有贊助也可以留下使用建議。信箱與留言必填；稱呼可留空。"
         />
         <div className="mt-4 space-y-4">
-          <Field label="信箱" hint="付款成功後會寄感謝信到這裡。">
+          <Field label="信箱" hint="付款成功會寄感謝信；送建議時方便我們回覆。">
             <TextInput
               type="email"
               value={input.email}
@@ -181,7 +220,7 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
             />
             <FieldError message={errors.email} />
           </Field>
-          <Field label="稱呼" hint="留空就是匿名贊助。">
+          <Field label="稱呼" hint="可留空。">
             <TextInput
               value={input.name}
               placeholder="例如：小葉"
@@ -191,11 +230,12 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
             />
             <FieldError message={errors.name} />
           </Field>
-          <Field label="留言">
-            <TextInput
+          <Field label="留言" hint={`可寫使用建議、想要的功能，最多 ${MESSAGE_MAX} 字。`}>
+            <TextArea
               value={input.message}
-              placeholder="例如：每天寫觀心書幫我很多"
-              maxLength={100}
+              placeholder="例如：希望回顧頁能篩選事項、或每天寫觀心書幫我很多"
+              maxLength={MESSAGE_MAX}
+              rows={4}
               aria-invalid={Boolean(errors.message)}
               onChange={(event) => patch({ message: event.target.value })}
             />
@@ -218,18 +258,27 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
               {formatAmount(input.amount)}
             </p>
           </div>
-          <Button
-            size="lg"
-            disabled={pending || !paymentReady}
-            onClick={submit}
-            className="shrink-0"
-          >
-            <HeartIcon className="size-[18px] text-on-brand" />
-            {pending ? "前往付款…" : "前往付款"}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button
+              size="lg"
+              variant="secondary"
+              disabled={pending !== null}
+              onClick={submitFeedback}
+            >
+              {pending === "note" ? "送出中…" : "送出留言"}
+            </Button>
+            <Button
+              size="lg"
+              disabled={pending !== null || !paymentReady}
+              onClick={submit}
+            >
+              <HeartIcon className="size-[18px] text-on-brand" />
+              {pending === "pay" ? "前往付款…" : "前往付款"}
+            </Button>
+          </div>
         </div>
         <p className="text-[13px] leading-relaxed text-ink-subtle">
-          付款由統一金流 PAYUNi 處理，卡號不會經過天天 daily。贊助不開發票；付款成功後會自動寄感謝信到你填的信箱。贊助屬於自願支持，不是商品購買，送出後不提供退款。
+          不想贊助也可以先「送出留言」。付款由統一金流 PAYUNi 處理，卡號不會經過天天 daily。贊助不開發票；付款成功後會自動寄感謝信到你填的信箱。贊助屬於自願支持，不是商品購買，送出後不提供退款。
         </p>
       </footer>
     </div>

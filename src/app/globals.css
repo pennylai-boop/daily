@@ -29,6 +29,9 @@
   --alert: #374151;
   --ring: rgba(38, 47, 139, 0.2);
   --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.06);
+  /* 打氣小語列的高度；側欄要靠它算出自己的可視高度（+1px 是底線）。 */
+  --pep-banner-h: 2.5rem;
+  --pep-banner-total: calc(var(--pep-banner-h) + 1px);
 }
 
 /* 深色模式沿用同一組橘藍，只把灰階換成深色並提亮強調色以維持對比。 */
@@ -132,7 +135,7 @@ body {
     overflow-wrap: anywhere;
   }
 
-  /* 打氣小語跑馬燈：由右往左無限循環，換句時靠 React key 重播。 */
+  /* 打氣小語跑馬燈：整串句子由右往左無限循環，內容不中途替換，所以不會重播。 */
   @keyframes pep-marquee {
     from {
       transform: translateX(0);
@@ -142,9 +145,19 @@ body {
     }
   }
 
+  /* 左側淡出的範圍要蓋過太陽鈕，句子才能滿版通過而不會疊在按鈕上。 */
   .pep-marquee-viewport {
     overflow: hidden;
-    mask-image: linear-gradient(90deg, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+    --pep-marquee-mask: linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 1.75rem,
+      #000 2.75rem,
+      #000 calc(100% - 1.5rem),
+      transparent 100%
+    );
+    -webkit-mask-image: var(--pep-marquee-mask);
+    mask-image: var(--pep-marquee-mask);
   }
 
   .pep-marquee-track {
@@ -162,8 +175,11 @@ body {
   }
 
   @media (prefers-reduced-motion: reduce) {
+    /* 不捲動時只留一句置中，左邊仍要空出太陽鈕的位置。 */
     .pep-marquee-viewport {
+      -webkit-mask-image: none;
       mask-image: none;
+      padding-left: 2.75rem;
     }
 
     .pep-marquee-track {
@@ -172,6 +188,10 @@ body {
       animation: none;
       white-space: normal;
       text-align: center;
+    }
+
+    .pep-marquee-track > span {
+      padding-right: 0;
     }
 
     .pep-marquee-track > span:nth-child(n + 2) {

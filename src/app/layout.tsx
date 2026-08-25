@@ -25,6 +25,10 @@ export const metadata: Metadata = {
     description: "用日曆看見每一天的心情，用日記、五感恩、觀心書寫下值得留下的內容。",
   },
   appleWebApp: { capable: true, title: "天天", statusBarStyle: "default" },
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {

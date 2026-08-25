@@ -1,5 +1,6 @@
 "use client";
 
+import { TimerFields } from "@/components/entry/timer-fields";
 import { CloseIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
@@ -12,18 +13,20 @@ import {
   groupMindfulnessItems,
   MINDFULNESS_MARKS,
 } from "@/lib/templates";
-import type { EntryBlock, MindfulnessChannel, MindfulnessMark } from "@/lib/types";
+import type { EntryBlock, MetricFieldDef, MindfulnessChannel, MindfulnessMark } from "@/lib/types";
 
 export function BlockEditor({
   block,
   onChange,
   onRemove,
+  metricFields,
   /** 掛在定期事項底下時不需要重複顯示標題列。 */
   showHeader = true,
 }: {
   block: EntryBlock;
   onChange: (next: EntryBlock) => void;
   onRemove?: () => void;
+  metricFields?: MetricFieldDef[];
   showHeader?: boolean;
 }) {
   const meta = getTemplate(block.template);
@@ -72,6 +75,21 @@ export function BlockEditor({
           <MindfulnessFields
             block={block}
             onChange={(data) => onChange({ ...block, template: "mindfulness", data })}
+          />
+        ) : null}
+
+        {block.template === "timer" ? (
+          <TimerFields
+            block={block}
+            onChange={(data) => onChange({ ...block, template: "timer", data })}
+          />
+        ) : null}
+
+        {block.template === "metric" ? (
+          <MetricFields
+            block={block}
+            extraFields={metricFields}
+            onChange={(data) => onChange({ ...block, template: "metric", data })}
           />
         ) : null}
       </div>
@@ -269,4 +287,59 @@ function MindfulnessFields({
       ))}
     </div>
   );
+}
+
+function MetricFields({
+  block,
+  extraFields,
+  onChange,
+}: {
+  block: Extract<EntryBlock, { template: "metric" }>;
+  extraFields?: MetricFieldDef[];
+  onChange: (data: Extract<EntryBlock, { template: "metric" }>["data"]) => void;
+}) {
+  const fields = mergeMetricFields([...(extraFields ?? []), ...block.data.fields]);
+
+  if (fields.length === 0) {
+    return (
+      <p className="text-[13px] text-ink-muted">
+        這個事項還沒設定要記錄的項目。請到定期目標裡編輯，寫上體重、腰圍等欄位。
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {fields.map((field) => (
+        <label key={field.id} className="flex items-center gap-2">
+          <span className="w-24 shrink-0 text-sm text-ink-muted">{field.label}</span>
+          <TextInput
+            inputMode="decimal"
+            value={block.data.values[field.id] ?? ""}
+            placeholder="數字"
+            aria-label={field.label}
+            onChange={(event) =>
+              onChange({
+                ...block.data,
+                fields,
+                values: { ...block.data.values, [field.id]: event.target.value },
+              })
+            }
+          />
+          {field.unit ? <span className="w-12 shrink-0 text-sm text-ink-subtle">{field.unit}</span> : null}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function mergeMetricFields(fields: MetricFieldDef[]): MetricFieldDef[] {
+  const seen = new Set<string>();
+  const next: MetricFieldDef[] = [];
+  for (const field of fields) {
+    if (!field.label.trim() || seen.has(field.id)) continue;
+    seen.add(field.id);
+    next.push(field);
+  }
+  return next;
 }

@@ -130,7 +130,10 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       update({
         blocks: [
           ...draft.blocks,
-          { id: createId(), routineId: routine.id, ...createEmptyContent(routine.template) },
+          { id: createId(), routineId: routine.id, ...createEmptyContent(routine.template, {
+            metricFields: routine.metricFields,
+            timerDefaults: routine.timerDefaults,
+          }) },
         ],
       });
     } else if (wasChecked && block && isBlockEmpty(block)) {
@@ -416,7 +419,12 @@ function RoutinePanel({
         {meta ? <span className="text-xs text-ink-subtle">{meta.tagline}</span> : null}
       </header>
       <div className="px-4 py-4">
-        <BlockEditor block={block} onChange={onBlockChange} showHeader={false} />
+        <BlockEditor
+          block={block}
+          metricFields={routine.metricFields}
+          onChange={onBlockChange}
+          showHeader={false}
+        />
       </div>
     </section>
   );

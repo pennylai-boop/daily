@@ -52,7 +52,7 @@ export interface SponsorInput {
   method: SponsorMethod;
   /** 顯示用的稱呼，留空視為匿名。 */
   name: string;
-  /** 必填：付款成功後寄感謝信用。 */
+  /** 必填：付款成功後寄感謝信，送使用建議也會用到。 */
   email: string;
   message: string;
 }
@@ -71,10 +71,29 @@ export type SponsorField = keyof SponsorInput;
 export type SponsorErrors = Partial<Record<SponsorField, string>>;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export const MESSAGE_MAX = 500;
+
+function validateContact(input: Pick<SponsorInput, "name" | "email" | "message">, emailHint: string) {
+  const errors: SponsorErrors = {};
+  const email = input.email.trim();
+  if (email.length === 0) {
+    errors.email = emailHint;
+  } else if (!EMAIL_PATTERN.test(email)) {
+    errors.email = "信箱格式看起來不對。";
+  }
+  if (input.name.trim().length > 20) errors.name = "稱呼請在 20 個字以內。";
+  if (input.message.trim().length > MESSAGE_MAX) {
+    errors.message = `留言請在 ${MESSAGE_MAX} 個字以內。`;
+  }
+  return errors;
+}
 
 /** 前後端共用的驗證。回傳空物件代表可以送出。 */
 export function validateSponsor(input: SponsorInput): SponsorErrors {
-  const errors: SponsorErrors = {};
+  const errors: SponsorErrors = validateContact(
+    input,
+    "請填寫信箱，付款成功後會寄感謝信給你。",
+  );
   const method = getMethod(input.method);
 
   if (!Number.isInteger(input.amount) || input.amount <= 0) {
@@ -83,16 +102,15 @@ export function validateSponsor(input: SponsorInput): SponsorErrors {
     errors.amount = `${method.label}可接受的金額是 ${method.min.toLocaleString("zh-TW")}～${method.max.toLocaleString("zh-TW")} 元。`;
   }
 
-  const email = input.email.trim();
-  if (email.length === 0) {
-    errors.email = "請填寫信箱，付款成功後會寄感謝信給你。";
-  } else if (!EMAIL_PATTERN.test(email)) {
-    errors.email = "信箱格式看起來不對。";
+  return errors;
+}
+
+/** 不付款、只送使用建議。信箱與留言必填。 */
+export function validateFeedback(input: SponsorInput): SponsorErrors {
+  const errors = validateContact(input, "請填寫信箱，方便我們回覆建議。");
+  if (input.message.trim().length === 0) {
+    errors.message = "請寫下使用建議或想告訴我們的話。";
   }
-
-  if (input.name.trim().length > 20) errors.name = "稱呼請在 20 個字以內。";
-  if (input.message.trim().length > 100) errors.message = "留言請在 100 個字以內。";
-
   return errors;
 }
 

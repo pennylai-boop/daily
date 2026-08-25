@@ -1,37 +1,25 @@
 /**
- * 贊助成功後的感謝信。
+ * 贊助感謝信與使用建議通知。
  *
- * 有設定 `RESEND_API_KEY` 時用 Resend 寄出；未設定時只記 log，
- * 開發環境仍可走完付款流程。
+ * 有設定 `RESEND_API_KEY` 時用 Resend 寄出；未設定時只記 log。
  */
 
 import { formatAmount } from "@/lib/support";
 
-export async function sendSponsorThankYou(params: {
-  email: string;
-  name: string;
-  amount: number;
-  merTradeNo: string;
-}): Promise<{ ok: true } | { ok: false; message: string }> {
-  const to = params.email.trim();
-  if (!to) return { ok: false, message: "缺少收件信箱。" };
+type MailResult = { ok: true } | { ok: false; message: string };
 
-  const greeting = params.name.trim() || "朋友";
-  const subject = "謝謝你支持天天 daily";
-  const text = [
-    `${greeting}，你好：`,
-    "",
-    `謝謝你贊助天天 daily ${formatAmount(params.amount)}。`,
-    "這份心意會變成繼續維護的動力，讓更多人能安靜地寫下自己的日子。",
-    "",
-    `訂單編號：${params.merTradeNo}`,
-    "",
-    "—— 天天 daily",
-  ].join("\n");
+async function sendMail(params: {
+  to: string;
+  subject: string;
+  text: string;
+  replyTo?: string;
+}): Promise<MailResult> {
+  const to = params.to.trim();
+  if (!to) return { ok: false, message: "缺少收件信箱。" };
 
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
-    console.info(`[support] 感謝信（尚未設定 RESEND_API_KEY）→ ${to}\n${text}`);
+    console.info(`[support] 信件（尚未設定 RESEND_API_KEY）→ ${to}\n${params.subject}\n${params.text}`);
     return { ok: true };
   }
 
@@ -48,8 +36,9 @@ export async function sendSponsorThankYou(params: {
       body: JSON.stringify({
         from,
         to: [to],
-        subject,
-        text,
+        subject: params.subject,
+        text: params.text,
+        ...(params.replyTo ? { reply_to: params.replyTo } : {}),
       }),
     });
 
@@ -62,7 +51,78 @@ export async function sendSponsorThankYou(params: {
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "寄送感謝信失敗。",
+      message: error instanceof Error ? error.message : "寄信失敗。",
     };
   }
+}
+
+export async function sendSponsorThankYou(params: {
+  email: string;
+  name: string;
+  amount: number;
+  merTradeNo: string;
+}): Promise<MailResult> {
+  const greeting = params.name.trim() || "朋友";
+  return sendMail({
+    to: params.email,
+    subject: "謝謝你支持天天 daily",
+    text: [
+      `${greeting}，你好：`,
+      "",
+      `謝謝你贊助天天 daily ${formatAmount(params.amount)}。`,
+      "這份心意會變成繼續維護的動力，讓更多人能安靜地寫下自己的日子。",
+      "",
+      `訂單編號：${params.merTradeNo}`,
+      "",
+      "—— 天天 daily",
+    ].join("\n"),
+  });
+}
+
+function inboxAddress(): string {
+  return (
+    process.env.SUPPORT_INBOX_EMAIL?.trim() ||
+    process.env.SUPPORT_EMAIL_FROM?.replace(/^.*<([^>]+)>.*$/, "$1").trim() ||
+    ""
+  );
+}
+
+export async function sendUsageFeedback(params: {
+  email: string;
+  name: string;
+  message: string;
+}): Promise<MailResult> {
+  const fromEmail = params.email.trim();
+  const greeting = params.name.trim() || "未留稱呼";
+  const body = [
+    `稱呼：${greeting}`,
+    `信箱：${fromEmail}`,
+    "",
+    params.message.trim(),
+  ].join("\n");
+
+  const inbox = inboxAddress();
+  if (!inbox) {
+    console.info(`[support] 使用建議（尚未設定 SUPPORT_INBOX_EMAIL）\n${body}`);
+  } else {
+    const delivered = await sendMail({
+      to: inbox,
+      subject: `天天 daily 使用建議・${greeting}`,
+      text: body,
+      replyTo: fromEmail,
+    });
+    if (!delivered.ok) return delivered;
+  }
+
+  return sendMail({
+    to: fromEmail,
+    subject: "我們已收到你的使用建議",
+    text: [
+      `${params.name.trim() || "朋友"}，你好：`,
+      "",
+      "謝謝你寫下對天天 daily 的建議。我們會讀過，有需要時會用這封信的信箱回覆你。",
+      "",
+      "—— 天天 daily",
+    ].join("\n"),
+  });
 }

@@ -8,7 +8,7 @@ import { SupportScreen } from "./support-screen";
 
 export const metadata: Metadata = {
   title: "支持",
-  description: "用任意金額贊助天天 daily，付款由 PAYUNi 處理，成功後會寄感謝信。",
+  description: "贊助天天 daily，或留下使用建議。付款由 PAYUNi 處理。",
 };
 
 // 憑證是 Cloud Run 的執行期環境變數，不能在 build 時就把「已設定」的結果烤進靜態頁。

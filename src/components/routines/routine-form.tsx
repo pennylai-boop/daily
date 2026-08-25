@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 
+import { CloseIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Field, TextInput } from "@/components/ui/field";
 import { todayIso, WEEKDAY_LABELS } from "@/lib/date";
 import { ROUTINE_EMOJIS } from "@/lib/routines";
 import { TEMPLATES } from "@/lib/templates";
-import type { Routine, RoutineFrequency } from "@/lib/types";
+import { createId } from "@/lib/storage";
+import { DEFAULT_TIMER, type MetricFieldDef, type Routine, type RoutineFrequency, type TimerDefaults } from "@/lib/types";
 
 type RoutineDraft = Omit<Routine, "id" | "createdAt">;
 
@@ -50,11 +52,16 @@ export function RoutineForm({
       note: "",
       frequency: { kind: "daily" },
       template: null,
+      metricFields: [{ id: createId(), label: "", unit: "" }],
+      timerDefaults: DEFAULT_TIMER,
       archived: false,
     },
   );
 
-  const canSubmit = draft.title.trim().length > 0 && isFrequencyComplete(draft.frequency);
+  const metricReady =
+    draft.template !== "metric" ||
+    (draft.metricFields ?? []).some((field) => field.label.trim().length > 0);
+  const canSubmit = draft.title.trim().length > 0 && isFrequencyComplete(draft.frequency) && metricReady;
 
   return (
     <form
@@ -62,7 +69,15 @@ export function RoutineForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (!canSubmit) return;
-        onSubmit({ ...draft, title: draft.title.trim(), note: draft.note.trim() });
+        onSubmit({
+          ...draft,
+          title: draft.title.trim(),
+          note: draft.note.trim(),
+          metricFields: (draft.metricFields ?? [])
+            .map((field) => ({ ...field, label: field.label.trim(), unit: field.unit.trim() }))
+            .filter((field) => field.label.length > 0),
+          timerDefaults: draft.timerDefaults ?? DEFAULT_TIMER,
+        });
       }}
     >
       <Field label="事項名稱" htmlFor="routine-title">
@@ -192,11 +207,35 @@ export function RoutineForm({
               name={template.name}
               description={template.description}
               selected={draft.template === template.id}
-              onSelect={() => setDraft({ ...draft, template: template.id })}
+              onSelect={() =>
+                setDraft({
+                  ...draft,
+                  template: template.id,
+                  timerDefaults: draft.timerDefaults ?? DEFAULT_TIMER,
+                  metricFields:
+                    template.id === "metric" && (draft.metricFields ?? []).length === 0
+                      ? [{ id: createId(), label: "", unit: "" }]
+                      : draft.metricFields,
+                })
+              }
             />
           ))}
         </div>
       </Field>
+
+      {draft.template === "timer" ? (
+        <TimerDefaultsFields
+          value={draft.timerDefaults ?? DEFAULT_TIMER}
+          onChange={(timerDefaults) => setDraft({ ...draft, timerDefaults })}
+        />
+      ) : null}
+
+      {draft.template === "metric" ? (
+        <MetricSetupFields
+          fields={draft.metricFields ?? []}
+          onChange={(metricFields) => setDraft({ ...draft, metricFields })}
+        />
+      ) : null}
 
       <Field label="備註" hint="選填，會顯示在清單上，例如提醒的時段。" htmlFor="routine-note">
         <TextInput
@@ -217,6 +256,123 @@ export function RoutineForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function TimerDefaultsFields({
+  value,
+  onChange,
+}: {
+  value: TimerDefaults;
+  onChange: (next: TimerDefaults) => void;
+}) {
+  return (
+    <Field label="計時預設" hint="每天打開時會用這個設定；當天仍可改成碼表或番茄鐘。">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-line bg-paper p-1">
+          {(
+            [
+              { id: "stopwatch" as const, label: "碼表" },
+              { id: "pomodoro" as const, label: "番茄鐘" },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={value.mode === option.id}
+              onClick={() => onChange({ ...value, mode: option.id })}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
+                value.mode === option.id ? "bg-surface text-accent shadow-sm" : "text-ink-muted hover:text-ink",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {value.mode === "pomodoro" ? (
+          <label className="flex items-center gap-2 text-sm text-ink-muted">
+            每顆
+            <TextInput
+              className="w-20"
+              inputMode="numeric"
+              value={String(value.pomodoroMinutes)}
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  pomodoroMinutes: Math.max(1, Math.min(180, Number(event.target.value.replace(/\D/g, "")) || 25)),
+                })
+              }
+            />
+            分鐘
+          </label>
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
+function MetricSetupFields({
+  fields,
+  onChange,
+}: {
+  fields: MetricFieldDef[];
+  onChange: (next: MetricFieldDef[]) => void;
+}) {
+  const rows = fields.length > 0 ? fields : [{ id: createId(), label: "", unit: "" }];
+
+  return (
+    <Field label="要記錄的項目" hint="建立時就要寫好。之後每天只要填數字，回顧會畫成曲線。">
+      <div className="space-y-2">
+        {rows.map((field, index) => (
+          <div key={field.id} className="flex gap-2">
+            <TextInput
+              value={field.label}
+              placeholder={index === 0 ? "例如：體重" : "例如：腰圍、喝水"}
+              maxLength={20}
+              aria-label={`項目 ${index + 1} 名稱`}
+              onChange={(event) => {
+                const next = [...rows];
+                next[index] = { ...field, label: event.target.value };
+                onChange(next);
+              }}
+            />
+            <TextInput
+              className="w-24"
+              value={field.unit}
+              placeholder="單位"
+              maxLength={12}
+              aria-label={`${field.label || `項目 ${index + 1}`}單位`}
+              onChange={(event) => {
+                const next = [...rows];
+                next[index] = { ...field, unit: event.target.value };
+                onChange(next);
+              }}
+            />
+            {rows.length > 1 ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`刪除 ${field.label || `項目 ${index + 1}`}`}
+                className="size-10 shrink-0 px-0"
+                onClick={() => onChange(rows.filter((item) => item.id !== field.id))}
+              >
+                <CloseIcon className="size-4" />
+              </Button>
+            ) : null}
+          </div>
+        ))}
+        <Button
+          size="sm"
+          variant="secondary"
+          type="button"
+          onClick={() => onChange([...rows, { id: createId(), label: "", unit: "" }])}
+        >
+          <PlusIcon className="size-4" />
+          再加一項
+        </Button>
+      </div>
+    </Field>
   );
 }
 

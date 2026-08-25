@@ -12,7 +12,7 @@ import {
 } from "./date";
 import { findMood } from "./moods";
 import { isRoutineDueOn } from "./routines";
-import { countWords, TEMPLATES } from "./templates";
+import { countWords, parseMetricNumber, TEMPLATES, timerElapsedSeconds } from "./templates";
 import type { DailyState, IsoDate, Routine } from "./types";
 
 export type RangeId = "1w" | "2w" | "1m" | "1q" | "6m" | "1y" | "3y" | "all";
@@ -133,7 +133,7 @@ export function routineRateSeries(
 export function writingSeries(state: DailyState, buckets: Bucket[]): ChartSeries[] {
   const today = todayIso();
 
-  return TEMPLATES.map((template, index) => ({
+  return TEMPLATES.filter((template) => template.kind === "writing").map((template, index) => ({
     id: template.id,
     label: `${template.emoji} ${template.name}`,
     color: SERIES_COLORS[index % SERIES_COLORS.length],
@@ -175,6 +175,80 @@ export function routineWordSeries(
       }),
     },
   ];
+}
+
+/** 計時事項：區間內累積分鐘。正在跑的碼表也算進去。 */
+export function timerMinutesSeries(
+  state: DailyState,
+  buckets: Bucket[],
+  routine: Routine,
+): ChartSeries[] {
+  const today = todayIso();
+  return [
+    {
+      id: `${routine.id}-minutes`,
+      label: `${routine.emoji} ${routine.title}`,
+      color: SERIES_COLORS[2],
+      values: buckets.map((bucket) => {
+        let total = 0;
+        let has = false;
+        for (const day of eachDay(bucket, today)) {
+          for (const block of state.entries[day]?.blocks ?? []) {
+            if (block.routineId !== routine.id || block.template !== "timer") continue;
+            const seconds =
+              day === today ? timerElapsedSeconds(block.data) : block.data.totalSeconds;
+            if (seconds > 0) {
+              has = true;
+              total += seconds;
+            }
+          }
+        }
+        return has ? total / 60 : null;
+      }),
+    },
+  ];
+}
+
+/** 紀錄事項：每個欄位一條曲線，區間內有值的日子取平均。 */
+export function metricSeries(
+  state: DailyState,
+  buckets: Bucket[],
+  routine: Routine,
+): ChartSeries[] {
+  const today = todayIso();
+  const fields =
+    (routine.metricFields ?? []).filter((field) => field.label.trim()).length > 0
+      ? (routine.metricFields ?? []).filter((field) => field.label.trim())
+      : firstMetricFields(state, routine.id);
+
+  return fields.map((field, index) => ({
+    id: `${routine.id}-${field.id}`,
+    label: field.unit ? `${field.label}（${field.unit}）` : field.label,
+    color: SERIES_COLORS[index % SERIES_COLORS.length],
+    values: buckets.map((bucket) => {
+      const numbers: number[] = [];
+      for (const day of eachDay(bucket, today)) {
+        for (const block of state.entries[day]?.blocks ?? []) {
+          if (block.routineId !== routine.id || block.template !== "metric") continue;
+          const parsed = parseMetricNumber(block.data.values[field.id] ?? "");
+          if (parsed !== null) numbers.push(parsed);
+        }
+      }
+      if (numbers.length === 0) return null;
+      return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+    }),
+  }));
+}
+
+function firstMetricFields(state: DailyState, routineId: string) {
+  for (const entry of Object.values(state.entries)) {
+    for (const block of entry.blocks) {
+      if (block.routineId === routineId && block.template === "metric" && block.data.fields.length > 0) {
+        return block.data.fields;
+      }
+    }
+  }
+  return [];
 }
 
 /** 心情平均分數（1–5），沒有選心情的區間為 null。 */

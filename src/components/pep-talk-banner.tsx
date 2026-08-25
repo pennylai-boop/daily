@@ -1,108 +1,65 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { randomPepTalk, resolvePepTalks } from "@/lib/pep-talk";
+import { resolvePepTalks } from "@/lib/pep-talk";
 import { setPepTalkVisible, useDailyStore } from "@/lib/store";
 
-/** 每則停留／輪播的時間（跑馬燈會在這段時間內循環捲動）。 */
-const HOLD_MS = 18_000;
-
 /**
- * 目前這一則放在模組層，用 `useSyncExternalStore` 訂閱。
+ * 一圈跑馬燈放幾則。
  *
- * 伺服器端快照回傳 null（還沒抽），瀏覽器 hydration 完成後才抽第一則，
- * 否則兩邊各抽一次一定會抽到不同句子，造成 hydration 落差。
+ * 只放一兩句時，寬螢幕會出現整段空白；整份清單（兩百多則）又會讓軌道長到不必要。
+ * 取十六則剛好能填滿桌機寬度，每次進站順序也不一樣。
  */
-let current: string | null = null;
-const listeners = new Set<() => void>();
-let timer: number | undefined;
-let poolKey = "";
-/** 給 interval / 點擊換句用的最新清單，只在 effect 裡更新。 */
-let activePool: readonly string[] = [];
+const MARQUEE_QUOTES = 16;
 
-function emit() {
-  for (const listener of listeners) listener();
+/** 中文字寬接近字級，用字數估算捲動時間就能讓長短句維持同樣速度。 */
+const CHARS_PER_SECOND = 2.75;
+/** 句與句之間的 4rem 間距，換算成大約幾個字。 */
+const GAP_CHARS = 5;
+
+function pickSequence(pool: string[]): string[] {
+  if (pool.length === 0) return [];
+  const shuffled = [...pool];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swap]] = [shuffled[swap], shuffled[index]];
+  }
+  return shuffled.slice(0, Math.min(MARQUEE_QUOTES, shuffled.length));
 }
 
-function rotate(pool: readonly string[]) {
-  current = randomPepTalk(pool, current);
-  emit();
-}
-
-function schedule(pool: readonly string[]) {
-  window.clearInterval(timer);
-  if (pool.length === 0) return;
-  timer = window.setInterval(() => rotate(activePool), HOLD_MS);
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0) {
-      window.clearInterval(timer);
-      timer = undefined;
-    }
-  };
-}
-
-function getSnapshot(): string | null {
-  return current;
-}
-
-function getServerSnapshot(): string | null {
-  return null;
-}
-
-/** 依字數估跑馬燈一圈時間，短句慢一點、長句快一點，至少 12 秒。 */
-function marqueeDurationSec(text: string): number {
-  return Math.max(12, Math.min(36, Math.round(text.length * 0.45)));
+function marqueeDurationSec(quotes: string[]): number {
+  const chars = quotes.reduce((sum, quote) => sum + quote.length + GAP_CHARS, 0);
+  return Math.max(60, Math.round(chars / CHARS_PER_SECOND));
 }
 
 /**
  * 貼齊畫面正上方的打氣小語彈層（sticky，不額外留上下空隙）。
- * 句子以跑馬燈由右往左撥放；點太陽隱藏；點句子換下一則。
+ *
+ * 句子一則接一則由右往左連續播放，不中途換內容，因此不會有重播的閃跳；點太陽隱藏。
  */
 export function PepTalkBanner() {
   const { state, ready } = useDailyStore();
-  const text = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const quotes = state.settings.pepTalk.quotes;
   const pool = useMemo(() => resolvePepTalks(quotes), [quotes]);
-  const poolSignature = useMemo(() => pool.join("\0"), [pool]);
-  const visible = ready && state.settings.pepTalk.visible && pool.length > 0;
+  const [sequence, setSequence] = useState<string[]>([]);
 
   useEffect(() => {
-    activePool = pool;
+    setSequence(pickSequence(pool));
+  }, [pool]);
 
-    if (!visible) {
-      window.clearInterval(timer);
-      timer = undefined;
-      return;
-    }
+  const visible = ready && state.settings.pepTalk.visible && sequence.length > 0;
+  if (!visible) return null;
 
-    if (current === null || poolSignature !== poolKey || !pool.includes(current)) {
-      poolKey = poolSignature;
-      rotate(pool);
-    }
-    schedule(pool);
-
-    return () => {
-      window.clearInterval(timer);
-      timer = undefined;
-    };
-  }, [visible, pool, poolSignature]);
-
-  if (!visible || !text) return null;
-
-  const durationSec = marqueeDurationSec(text);
+  const durationSec = marqueeDurationSec(sequence);
 
   return (
     <div
-      role="status"
+      aria-label="打氣小語"
       className="sticky top-0 z-[60] w-full border-b border-brand/20 bg-brand-tint pt-[env(safe-area-inset-top,0px)] shadow-[0_2px_10px_rgba(17,24,39,0.06)]"
     >
-      <div className="relative flex min-h-10 w-full items-center px-3 py-2 sm:px-4">
+      {/* 高度綁 --pep-banner-h，側欄才算得出自己扣掉這條之後的可視高度。 */}
+      <div className="relative flex h-[var(--pep-banner-h)] w-full items-center px-3 py-2 sm:px-4">
         <button
           type="button"
           aria-label="隱藏打氣小語"
@@ -113,25 +70,22 @@ export function PepTalkBanner() {
           <span aria-hidden>☀</span>
         </button>
 
-        <button
-          type="button"
-          aria-label="換一則打氣小語"
-          onClick={() => {
-            rotate(activePool);
-            schedule(activePool);
-          }}
-          className="pep-marquee-viewport w-full rounded-lg py-0.5 pl-10 transition-colors hover:bg-brand/10 sm:pl-12"
-        >
+        <div className="pep-marquee-viewport w-full py-0.5">
           <span
-            key={text}
             className="pep-marquee-track text-[13px] leading-snug font-medium text-brand-strong sm:text-sm"
             style={{ ["--pep-marquee-duration" as string]: `${durationSec}s` }}
           >
             {/* 複製兩份才能無縫銜接：動畫只移半段寬度。 */}
-            <span>{text}</span>
-            <span aria-hidden>{text}</span>
+            {sequence.map((quote, index) => (
+              <span key={index}>{quote}</span>
+            ))}
+            {sequence.map((quote, index) => (
+              <span key={`echo-${index}`} aria-hidden>
+                {quote}
+              </span>
+            ))}
           </span>
-        </button>
+        </div>
       </div>
     </div>
   );

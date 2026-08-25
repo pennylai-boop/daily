@@ -3,7 +3,7 @@
 import { formatFullDate } from "./date";
 import { findMood, type MoodOption } from "./moods";
 import { blobToDataUrl, hasNativeShare, nativeShare } from "./native-bridge";
-import { getMark, getTemplate, groupMindfulnessItems, isBlockEmpty } from "./templates";
+import { getMark, getTemplate, groupMindfulnessItems, isBlockEmpty, summarizeBlock } from "./templates";
 import type { CustomMood, DayEntry, EntryPhoto, Routine } from "./types";
 
 /**
@@ -473,6 +473,11 @@ export async function buildDayImage(
         }
         page.space(14);
       }
+    }
+
+    if (block.template === "timer" || block.template === "metric") {
+      const summary = summarizeBlock(block);
+      if (summary) page.paragraph(summary);
     }
 
     page.space(26);

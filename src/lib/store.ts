@@ -16,7 +16,6 @@ import type {
   DailyState,
   DayEntry,
   FocusItem,
-  FocusTimerTask,
   IsoDate,
   LineSettings,
   MoodLevel,
@@ -193,10 +192,6 @@ export function setMonthGoals(month: string, items: FocusItem[]): void {
     else delete monthGoals[month];
     return { ...current, monthGoals };
   });
-}
-
-export function setFocusQueue(tasks: FocusTimerTask[]): void {
-  commit((current) => ({ ...current, focusQueue: tasks }));
 }
 
 export function toggleRoutineCheck(routineId: string, date: IsoDate): void {
@@ -447,7 +442,6 @@ export interface DailyStore {
   deleteRoutine: typeof deleteRoutine;
   setWeekGoals: typeof setWeekGoals;
   setMonthGoals: typeof setMonthGoals;
-  setFocusQueue: typeof setFocusQueue;
   toggleRoutineCheck: typeof toggleRoutineCheck;
   updateProfile: typeof updateProfile;
   applyLineProfile: typeof applyLineProfile;
@@ -481,7 +475,6 @@ export function useDailyStore(): DailyStore {
     deleteRoutine,
     setWeekGoals,
     setMonthGoals,
-    setFocusQueue,
     toggleRoutineCheck,
     updateProfile,
     applyLineProfile,

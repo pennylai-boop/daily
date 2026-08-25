@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { FocusList } from "@/components/entry/focus-list";
-import { FocusModePanel } from "@/components/focus/focus-mode-panel";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -123,8 +122,6 @@ export function RoutinesScreen() {
         </div>
       </Card>
 
-      <FocusModePanel />
-
       <div className="flex items-center gap-2 px-1">
         <h2 className="text-sm font-semibold text-ink-muted">重複進行</h2>
         <InfoHint label="重複目標是什麼">
@@ -163,6 +160,8 @@ export function RoutinesScreen() {
               note: editing.note,
               frequency: editing.frequency,
               template: editing.template,
+              metricFields: editing.metricFields,
+              timerDefaults: editing.timerDefaults,
               archived: editing.archived,
             }}
             onCancel={() => setMode({ kind: "closed" })}

@@ -6,6 +6,7 @@ import type {
   DayEntry,
   EntryBlock,
   EntryPhoto,
+  MetricFieldDef,
   MoodLevel,
   Profile,
   Routine,
@@ -13,6 +14,7 @@ import type {
   SharedJournal,
   TemplateId,
   ThemePreference,
+  TimerDefaults,
 } from "./types";
 
 export const STORE_KEY = "daily.store.v1";
@@ -24,8 +26,9 @@ export const THEME_KEY = "daily.theme";
  * 5：打氣小語可在設定裡編輯，並記住是否顯示頂部彈層。
  * 6：定期目標頁加入週／月目標條列。
  * 7：專注模式計時佇列。
+ * 8：定期事項新增計時、紀錄兩種格式。
  */
-export const STORE_VERSION = 7;
+export const STORE_VERSION = 8;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   profile: { name: "", lineUserId: "", avatarUrl: null },
@@ -42,7 +45,6 @@ export const EMPTY_STATE: DailyState = {
   checks: {},
   weekGoals: {},
   monthGoals: {},
-  focusQueue: [],
   settings: DEFAULT_SETTINGS,
   sharedWithMe: [],
 };
@@ -115,30 +117,11 @@ export function normalizeState(value: unknown): DailyState {
     checks: isRecord(candidate.checks) ? (candidate.checks as DailyState["checks"]) : {},
     weekGoals: normalizePeriodGoalMap(candidate.weekGoals),
     monthGoals: normalizePeriodGoalMap(candidate.monthGoals),
-    focusQueue: normalizeFocusQueue(candidate.focusQueue),
     settings: mergeSettings(candidate.settings),
     sharedWithMe: Array.isArray(candidate.sharedWithMe)
       ? candidate.sharedWithMe.map(normalizeJournal)
       : [],
   };
-}
-
-function normalizeFocusQueue(value: unknown): DailyState["focusQueue"] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(
-      (item): item is { id: string; title: string; emoji?: string; durationMinutes?: number } =>
-        !!item &&
-        typeof item === "object" &&
-        typeof (item as { id?: unknown }).id === "string" &&
-        typeof (item as { title?: unknown }).title === "string",
-    )
-    .map((item) => ({
-      id: item.id,
-      title: item.title.trim() || "未命名",
-      emoji: (item.emoji ?? "⏱").trim() || "⏱",
-      durationMinutes: Math.max(1, Math.min(180, Math.trunc(Number(item.durationMinutes) || 25))),
-    }));
 }
 
 function normalizePeriodGoalMap(value: unknown): DailyState["weekGoals"] {
@@ -262,6 +245,29 @@ const LEGACY_MINDFULNESS_FIELDS: [string, string][] = [
 /** 舊版備份沒有 routineId / template 欄位，補上預設值以免介面讀到 undefined。 */
 function normalizeBlock(block: EntryBlock): EntryBlock {
   const withRoutine = { ...block, routineId: block.routineId ?? null };
+  if (withRoutine.template === "timer") {
+    const data = (withRoutine.data ?? {}) as Partial<Extract<EntryBlock, { template: "timer" }>["data"]>;
+    return {
+      ...withRoutine,
+      template: "timer",
+      data: {
+        mode: data.mode === "pomodoro" ? "pomodoro" : "stopwatch",
+        totalSeconds: Math.max(0, Math.trunc(Number(data.totalSeconds) || 0)),
+        runningStartedAt: typeof data.runningStartedAt === "string" ? data.runningStartedAt : null,
+        pomodoroMinutes: Math.max(1, Math.min(180, Math.trunc(Number(data.pomodoroMinutes) || 25))),
+        pomodoroDone: Math.max(0, Math.trunc(Number(data.pomodoroDone) || 0)),
+      },
+    };
+  }
+  if (withRoutine.template === "metric") {
+    const data = (withRoutine.data ?? {}) as Partial<Extract<EntryBlock, { template: "metric" }>["data"]>;
+    const fields = Array.isArray(data.fields) ? data.fields : [];
+    const values =
+      data.values && typeof data.values === "object" && !Array.isArray(data.values)
+        ? (data.values as Record<string, string>)
+        : {};
+    return { ...withRoutine, template: "metric", data: { fields, values } };
+  }
   if (withRoutine.template !== "mindfulness") return withRoutine;
 
   const data = withRoutine.data as unknown as Record<string, unknown>;
@@ -283,7 +289,36 @@ function normalizeBlock(block: EntryBlock): EntryBlock {
 }
 
 function withTemplate(routine: Routine): Routine {
-  return { ...routine, template: (routine.template ?? null) as TemplateId | null };
+  return {
+    ...routine,
+    template: (routine.template ?? null) as TemplateId | null,
+    metricFields: normalizeMetricFields(routine.metricFields),
+    timerDefaults: normalizeTimerDefaults(routine.timerDefaults),
+  };
+}
+
+function normalizeMetricFields(value: unknown): MetricFieldDef[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (item): item is { id?: unknown; label?: unknown; unit?: unknown } =>
+        !!item && typeof item === "object",
+    )
+    .map((item, index) => ({
+      id: typeof item.id === "string" && item.id ? item.id : `metric-${index}`,
+      label: typeof item.label === "string" ? item.label.trim().slice(0, 20) : "",
+      unit: typeof item.unit === "string" ? item.unit.trim().slice(0, 12) : "",
+    }))
+    .filter((item) => item.label.length > 0);
+}
+
+function normalizeTimerDefaults(value: unknown): TimerDefaults {
+  const raw = value && typeof value === "object" ? (value as TimerDefaults) : null;
+  const minutes = Math.max(1, Math.min(180, Math.trunc(Number(raw?.pomodoroMinutes) || 25)));
+  return {
+    mode: raw?.mode === "pomodoro" ? "pomodoro" : "stopwatch",
+    pomodoroMinutes: minutes,
+  };
 }
 
 export function loadTheme(): ThemePreference {

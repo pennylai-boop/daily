@@ -50,8 +50,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <PepTalkBanner />
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col lg:flex-row">
-        <aside className="hidden shrink-0 border-r border-line bg-surface px-4 py-8 lg:flex lg:w-60 lg:flex-col">
+      <div className="flex w-full min-w-0 flex-1 flex-col lg:flex-row">
+        {/* 側欄固定在視窗高度內：整頁再長也不跟著拉長，項目多時自己捲動。 */}
+        <aside
+          className={cn(
+            "hidden shrink-0 overflow-y-auto border-r border-line bg-surface px-4 py-8 lg:sticky lg:flex lg:w-60 lg:flex-col",
+            pepVisible
+              ? "lg:top-[var(--pep-banner-total)] lg:h-[calc(100dvh-var(--pep-banner-total))]"
+              : "lg:top-0 lg:h-dvh",
+          )}
+        >
           <div className="flex items-center justify-between gap-2">
             <BrandMark />
             <ProfileAvatar profile={state.settings.profile} size={36} />
@@ -162,9 +170,9 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
     <Link href="/" className="flex items-center gap-2.5">
       <span
         aria-hidden
-        className="flex size-9 items-center justify-center rounded-xl bg-brand text-on-brand"
+        className="flex size-9 items-center justify-center rounded-xl bg-brand"
       >
-        <SunIcon className="size-[22px]" strokeWidth={2} />
+        <SunIcon className="size-[22px] text-white" strokeWidth={2} />
       </span>
       <span className="flex flex-col leading-tight">
         <span className="text-[15px] font-semibold tracking-tight text-ink">天天</span>

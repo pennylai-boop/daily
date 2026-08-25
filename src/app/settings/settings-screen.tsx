@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { LinkIcon, ShareIcon, TrashIcon } from "@/components/icons";
@@ -9,6 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { Field, TextInput } from "@/components/ui/field";
 import { Segmented, Switch } from "@/components/ui/segmented";
 import { Card, Chip, PageHeading, SectionHeading } from "@/components/ui/surfaces";
+import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
 import { copyInviteUrl, shareInvite } from "@/lib/line-invite";
 import { signInWithLine, signOutFromLine } from "@/lib/line-auth";
@@ -69,7 +71,7 @@ export function SettingsScreen() {
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeading
         title="設定"
-        description="帳號、通知與分享、資料備份；打氣小語在頁面最下方。"
+        description="帳號、通知與分享、資料備份；打氣小語與法律條款在頁面最下方。"
         action={
           <Segmented
             options={THEME_OPTIONS}
@@ -200,6 +202,8 @@ export function SettingsScreen() {
       </Card>
 
       <PepTalkSettingsCard />
+
+      <LegalLinks />
     </div>
   );
 }
@@ -417,6 +421,23 @@ function PepTalkSettingsCard() {
         </Button>
       ) : null}
     </Card>
+  );
+}
+
+/** 條款平常不會有人點，收成頁尾一排小灰字連結就夠，全文放獨立頁。 */
+function LegalLinks() {
+  const linkClass =
+    "inline-flex min-h-9 items-center text-xs text-ink-subtle underline-offset-4 transition-colors hover:text-ink-muted hover:underline sm:min-h-0";
+  return (
+    <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-subtle">
+      <Link href="/privacy" className={linkClass}>
+        隱私權政策
+      </Link>
+      <Link href="/terms" className={linkClass}>
+        使用條款
+      </Link>
+      <span>生效日 {LEGAL_EFFECTIVE_DATE}</span>
+    </p>
   );
 }
 

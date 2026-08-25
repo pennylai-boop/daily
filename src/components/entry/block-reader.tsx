@@ -1,4 +1,4 @@
-import { getMark, getTemplate, groupMindfulnessItems } from "@/lib/templates";
+import { getMark, getTemplate, groupMindfulnessItems, summarizeBlock } from "@/lib/templates";
 import type { EntryBlock } from "@/lib/types";
 
 /** 唯讀呈現一段書寫內容，用於被分享的紀錄。 */
@@ -62,6 +62,14 @@ export function BlockReader({ block }: { block: EntryBlock }) {
               </div>
             ))}
         </dl>
+      ) : null}
+
+      {block.template === "timer" ? (
+        <p className="text-sm text-ink-muted">{summarizeBlock(block) || "尚未計時"}</p>
+      ) : null}
+
+      {block.template === "metric" ? (
+        <p className="text-sm text-ink-muted">{summarizeBlock(block) || "尚未填寫"}</p>
       ) : null}
     </section>
   );
