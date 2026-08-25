@@ -280,7 +280,7 @@ class PageBuilder {
       ctx.font = this.font(22);
       ctx.fillStyle = COLORS.inkSubtle;
       ctx.textAlign = "right";
-      ctx.fillText("daily.introvsita.ai", WIDTH - PADDING, y + 46);
+      ctx.fillText("daily.introvista.ai", WIDTH - PADDING, y + 46);
       ctx.textAlign = "left";
     });
     this.y += 60;

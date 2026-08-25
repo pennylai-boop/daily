@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { BlockEditor } from "@/components/entry/block-editor";
 import { FocusList } from "@/components/entry/focus-list";
@@ -33,7 +33,14 @@ import { hasContent } from "@/lib/stats";
 import { createId } from "@/lib/storage";
 import { createDayEntry, useDailyStore } from "@/lib/store";
 import { createEmptyContent, getTemplate, isBlockEmpty } from "@/lib/templates";
-import { DEFAULT_MOOD_ID, type DayEntry, type EntryBlock, type IsoDate, type Routine } from "@/lib/types";
+import {
+  DEFAULT_MOOD_ID,
+  type DayEntry,
+  type EntryBlock,
+  type IsoDate,
+  type LineShareTarget,
+  type Routine,
+} from "@/lib/types";
 
 export function EntryScreen({ date }: { date: IsoDate }) {
   const { state, ready } = useDailyStore();
@@ -54,12 +61,15 @@ export function EntryScreen({ date }: { date: IsoDate }) {
 type SaveStatus = "idle" | "saving" | "saved" | "full";
 
 function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
-  const { state, saveEntry, deleteEntry, toggleRoutineCheck } = useDailyStore();
+  const { state, saveEntry, deleteEntry, toggleRoutineCheck, markLineTargetUsed } =
+    useDailyStore();
   const [draft, setDraft] = useState<DayEntry>(initial);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [targetId, setTargetId] = useState<string | null>(null);
 
   const editable = canEditEntry(date);
   const deletable = canDeleteEntry(date);
@@ -141,16 +151,30 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     }
   };
 
-  const { line } = state.settings;
-  const lineTarget = line.enabled && line.groupName.trim() ? line.groupName.trim() : null;
+  // 最近傳過的排前面，最常用的那個就會是打開面板時的預設值。
+  const shareTargets = useMemo(
+    () =>
+      [...state.settings.line.targets].sort((a, b) =>
+        (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""),
+      ),
+    [state.settings.line.targets],
+  );
 
-  const share = async () => {
+  const share = async (target: LineShareTarget | null) => {
+    setPicking(false);
     setSharing(true);
     setShareMessage(null);
     try {
       const result = await shareDayImage(draft, state.routines, checkedIds, state.customMoods);
+      if (target) markLineTargetUsed(target.id);
       if (result === "downloaded") {
-        setShareMessage("已下載圖片，可以直接傳到 LINE 或其他地方。");
+        setShareMessage(
+          target
+            ? `已下載圖片，傳到 LINE 的「${target.name}」即可。`
+            : "已下載圖片，可以直接傳到 LINE 或其他地方。",
+        );
+      } else if (target) {
+        setShareMessage(`分享面板開好了，選 LINE →「${target.name}」送出。`);
       }
     } catch (error) {
       // 使用者在系統分享面板按取消時會拋出 AbortError，不需要提示。
@@ -160,6 +184,17 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     } finally {
       setSharing(false);
     }
+  };
+
+  /** 沒有記過對象就不必多一層確認，直接開分享面板。 */
+  const startShare = () => {
+    if (shareTargets.length === 0) {
+      void share(null);
+      return;
+    }
+    setTargetId(shareTargets[0].id);
+    setShareMessage(null);
+    setPicking(true);
   };
 
   return (
@@ -368,24 +403,109 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
               size="sm"
               disabled={sharing}
               className="min-w-0 shrink"
-              onClick={() => void share()}
+              onClick={() => (picking ? setPicking(false) : startShare())}
             >
               <ImageIcon className="size-4 shrink-0" />
-              <span className="truncate">
-                {sharing ? "產生圖片中…" : lineTarget ? `分享到 ${lineTarget}` : "分享成圖片"}
-              </span>
+              <span className="truncate">{sharing ? "產生圖片中…" : "分享成圖片"}</span>
             </Button>
           </div>
+
+          {picking ? (
+            <ShareTargetPicker
+              targets={shareTargets}
+              selectedId={targetId}
+              onSelect={setTargetId}
+              onCancel={() => setPicking(false)}
+              onConfirm={() =>
+                void share(shareTargets.find((target) => target.id === targetId) ?? null)
+              }
+            />
+          ) : null}
+
           {shareMessage ? (
             <p className="text-right text-xs text-ink-muted">{shareMessage}</p>
-          ) : lineTarget ? (
-            <p className="text-right text-xs text-ink-subtle">
-              在分享面板選 LINE →「{lineTarget}」即可送出整頁圖片。
-            </p>
           ) : null}
         </footer>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 送出前挑一個常傳的對象再確認。
+ *
+ * 挑選只影響提示文字與排序：瀏覽器沒有辦法把訊息直接投進某個 LINE 群組，
+ * 按下確認後仍然是開系統分享面板，由使用者在 LINE 裡選同一個對象。
+ */
+function ShareTargetPicker({
+  targets,
+  selectedId,
+  onSelect,
+  onCancel,
+  onConfirm,
+}: {
+  targets: LineShareTarget[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-muted/50 p-3">
+      <p className="text-[13px] font-medium text-ink">要傳給誰？</p>
+      <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="分享對象">
+        {targets.map((target) => (
+          <TargetChip
+            key={target.id}
+            label={target.name}
+            selected={selectedId === target.id}
+            onSelect={() => onSelect(target.id)}
+          />
+        ))}
+        <TargetChip
+          label="不指定"
+          selected={selectedId === null}
+          onSelect={() => onSelect(null)}
+        />
+      </div>
+      <p className="mt-2 text-xs text-ink-subtle">
+        確認後會開啟分享面板，在裡面選 LINE 與同一個對象即可送出。
+      </p>
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          取消
+        </Button>
+        <Button size="sm" onClick={onConfirm}>
+          確認發送
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TargetChip({
+  label,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={
+        selected
+          ? "max-w-full truncate rounded-full bg-brand px-3 py-1.5 text-[13px] font-medium text-on-brand"
+          : "max-w-full truncate rounded-full border border-line-strong px-3 py-1.5 text-[13px] text-ink-muted transition-colors hover:border-ink-subtle hover:text-ink"
+      }
+    >
+      {label}
+    </button>
   );
 }
 

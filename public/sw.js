@@ -5,15 +5,15 @@
  * 沒有網路也能照樣寫紀錄。策略刻意保守：
  * - 頁面：先連網，失敗才用快取，最後退回快取裡的首頁
  * - /_next/static 與圖示：內容有雜湊，直接快取優先
- * - /api 與 /support*：完全不碰。付款與金流回傳一定要即時，不能給到舊的畫面
+ * - /api、/support* 與 /divination/credits*：完全不碰。付款與點數餘額一定要即時，不能給到舊的畫面
  *
  * 改動這個檔案時記得同時改 VERSION，舊快取才會在啟用階段被清掉。
  */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `daily-shell-${VERSION}`;
 const ASSET_CACHE = `daily-assets-${VERSION}`;
-const SHELL_ROUTES = ["/", "/routines", "/insights", "/shared", "/settings"];
+const SHELL_ROUTES = ["/", "/routines", "/insights", "/divination", "/shared", "/settings"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -51,7 +51,13 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/support")) return;
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/support") ||
+    url.pathname.startsWith("/divination/credits")
+  ) {
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirstPage(request));

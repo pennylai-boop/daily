@@ -36,6 +36,8 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
+    // 對外只給一句話，但伺服器要留下真正的原因，否則憑證失效這種問題完全查不出來。
+    console.error(`[support] 使用建議寄送失敗：${result.message}`);
     return NextResponse.json({ error: "留言送出失敗，請稍後再試。" }, { status: 502 });
   }
 

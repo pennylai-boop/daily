@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BlockReader } from "@/components/entry/block-reader";
 import { MoodGlyph } from "@/components/entry/mood-picker";
@@ -10,12 +10,18 @@ import { Card, Chip, EmptyState, PageHeading, SectionHeading, TextLink } from "@
 import { formatFullDate, formatRelativeDay } from "@/lib/date";
 import { findMood } from "@/lib/moods";
 import { hasContent } from "@/lib/stats";
-import { useDailyStore } from "@/lib/store";
+import { refreshSharedJournals, useDailyStore } from "@/lib/store";
 import { isBlockEmpty } from "@/lib/templates";
 import type { DayEntry, SharedJournal } from "@/lib/types";
 
 export function SharedScreen() {
   const { state, ready } = useDailyStore();
+  const lineUserId = state.settings.profile.lineUserId;
+
+  // 對方可能在別的裝置剛接受邀請、或紀錄剛更新，進頁面時跟雲端拿最新的一份。
+  useEffect(() => {
+    if (lineUserId) void refreshSharedJournals();
+  }, [lineUserId]);
 
   if (!ready) {
     return (

@@ -114,6 +114,10 @@ export function buildUppRequest(params: {
   amount: number;
   method: SponsorMethod;
   email: string;
+  /** 付款頁與帳務上顯示的商品名稱，預設是贊助。 */
+  prodDesc?: string;
+  /** 使用者在付款頁按「返回商店」時要回到的路徑。 */
+  backPath?: string;
 }): UppRequest {
   const { config, merTradeNo, amount, method, email } = params;
 
@@ -122,10 +126,10 @@ export function buildUppRequest(params: {
     MerTradeNo: merTradeNo,
     TradeAmt: amount,
     Timestamp: Math.floor(Date.now() / 1000),
-    ProdDesc: SPONSOR_PRODUCT_NAME,
+    ProdDesc: params.prodDesc ?? SPONSOR_PRODUCT_NAME,
     ReturnURL: `${config.siteUrl}/api/support/return`,
     NotifyURL: `${config.siteUrl}/api/support/notify`,
-    BackURL: `${config.siteUrl}/support`,
+    BackURL: `${config.siteUrl}${params.backPath ?? "/support"}`,
     Lang: "zh-tw",
   };
 

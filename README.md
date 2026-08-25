@@ -4,7 +4,7 @@
 
 - 產品中文名稱：天天
 - 產品英文名稱：daily
-- 產品網域：daily.introvsita.ai
+- 產品網域：daily.introvista.ai
 - 使用地區：台灣（繁體中文）
 
 這個 repo 目前是**前端**實作。所有資料都存在瀏覽器的 `localStorage`，尚未接上後端。
@@ -62,9 +62,10 @@ npm run dev
 
 | | 手機 | 桌機 |
 | --- | --- | --- |
-| 主導覽 | 底部五個分頁：日曆／定期事項／回顧／被分享紀錄／支持 | 左側欄六個項目 |
-| | （iOS App 內少一個「支持」，剩四個分頁；見「包成 App」） | |
-| 設定 | 右上角頭貼進入（只保留頭像） | 左側欄「設定」 |
+| 主導覽 | 底部四個分頁：日曆／定期事項／回顧／卜卦 | 左側欄七個項目 |
+| 其餘項目 | 左上角選單鍵拉出側邊抽屜，內容和桌機側欄相同 | 都在左側欄 |
+| 設定 | 右上角頭貼進入（只保留頭像），或從側邊抽屜 | 左側欄「設定」 |
+| 支持 | 右上角橘色愛心，或從側邊抽屜（iOS App 內隱藏；見「包成 App」） | 左側欄「支持」 |
 | 內容欄位 | 單欄 | 日曆與側欄並排、圖表兩欄 |
 
 手機版的幾個細節：
@@ -254,6 +255,93 @@ npm run dev
 付款由統一金流 PAYUNi 的整合式支付頁處理，卡號不經過本站；付款成功後由速買配 SmilePay 開立發票。
 串接細節見下方「贊助金流」。
 
+### 數字卜卦（`/divination`）
+
+《梅花易數》的數字起卦法（`src/lib/hexagram.ts`）。分成四步：**先讀懂 → 想問的事 → 起卦 → 結果**，
+上方有步驟指示器。
+
+**第一步刻意擋在前面。** 直接給輸入框的話，很容易變成「問到滿意為止」的抽籤機。所以先講三件事：
+卦不幫你決定、只是給糾結的心一個可以靠著想的東西；算的是此刻的天時地利人和，所以一卦大約看
+接下來三個月；卦象不理想不是判決，三個月後可以再問。下面接兩張：**三不占**（不誠、不義、不疑）
+和**怎麼問才有參考價值**（情緒滿的時候先別問、事後回頭對照紀錄、可以當每天的練習）。
+「我了解了，開始卜卦」排在這幾張說明卡之後才出現——讀完才動手，是這一步存在的理由，
+按鈕夾在中間就會被跳過。
+
+**想問的事**可以打字，也可以按「語音輸入」用說的（`src/lib/speech.ts`、
+`src/components/voice-input-button.tsx`）。Web Speech API 只有 Chrome／Edge／Safari 支援，
+不支援的瀏覽器整顆按鈕不出現——留一顆按了沒反應的鈕比沒有更糟。下面另外給三個範例問句可以直接套用。
+
+**起卦**是 9 個數字，每格一位數、三個一組：前 3 個算上卦、中 3 個算下卦、後 3 個算動爻。
+畫面上不解釋規則，破折號的分組就是提示，各格的 `aria-label` 會念出「上卦第 1 個數字」。
+按下「開始起卦」後六爻由下往上一爻一爻浮出來（`src/app/divination/hexagram-lines.tsx`）；
+起卦算法前後端共用同一份，所以動畫畫的就是真正那一卦，不是佔位的假圖。動畫跑完才切到結果，
+API 比動畫快也會等它畫完。
+
+**結果**把本卦與變卦並排畫出來、標出動爻，再接 Gemini 的解讀（`src/server/divination.ts`）。
+沒設定 `GEMINI_API_KEY` 時只會在伺服器印出提示詞、不會回傳解讀。
+
+標題旁的小 i 說明的是「這是什麼、適合問什麼」，不是操作步驟。
+
+#### 額度
+
+卦的效期大約三個月，免費額度就照同一個節奏：**每三個月一次免費**，同一輪裡想再問要用點數
+（規則在 `src/lib/divination-quota.ts`，狀態存在 `DailyState.divination`）。額度只在 AI 解讀成功
+之後才扣，起卦失敗或解讀失敗不算。額度用完時仍然看得到上一次問的問題與解讀。
+
+#### 點數與兌換碼（`/divination/credits`）
+
+點數用**兌換碼**發，不綁帳號。這裡沒有可驗證的使用者身分可以掛帳：日記都在 localStorage，
+LINE 登入目前只在 LINE App 內有效（`src/lib/line-auth.ts`），瀏覽器使用者沒有身分可言。
+
+所以餘額記在伺服器（`divination_credit_codes`），兌換碼是領用的憑據：
+
+1. 選方案、填信箱與發票資訊、走 PAYUNi 付款（`/api/divination/credits/checkout`）。訂單沿用
+   `sponsor_orders`，只多一個 `product` 欄位區分贊助或點數，金流、Notify、寄信都是同一條路。
+   **金額一律由伺服器依方案算，不看前端傳來的數字。**
+2. 付款成功後 Notify 開發票、發一組 12 位兌換碼並寄到信箱（`src/server/credit-codes.ts`）。
+   一筆訂單只發一組，Notify 被重送也不會多給點數。
+3. 使用者在 `/divination/credits` 輸入兌換碼，`/api/divination/credits` 查到餘額後記在本機。
+4. 用點數起卦時把碼一起送去 `/api/divination`，**扣點在伺服器做**，前端動不了餘額。
+   扣款排在 AI 解讀成功之後：解讀失敗還扣一點等於收了錢沒給東西。
+
+這樣換手機或清掉瀏覽器資料之後，重新輸入信件裡的同一組碼就能接回剩下的點數。
+扣點走 Postgres function `consume_divination_credit`，帶 `credits_used < credits` 條件更新，
+所以同時進來兩個請求不會把同一點用兩次。
+
+剩餘點數常駐在手機版右上角與桌機側欄（`src/components/points-badge.tsx`），一點卜一次。
+只有跟卜卦有過關係的人才看得到它——綁過兌換碼、有點數，或卜過卦；
+從來不用卜卦的人不需要在每一頁看到一個餘額。
+
+**價格在 `src/lib/divination-credits.ts` 的 `CREDIT_PACKS`，要調整只改那一份。**
+買得越多每點越便宜，「最划算」的標記由 `BEST_VALUE_PACK_ID` 依單價自己算出來，不用手動標。
+金額受 PAYUNi 的支付工具限制：超商代碼上限 20,000、ATM 上限 49,999，
+所以 30,000 的旗艦只能刷卡，畫面上會依選的付款方式把不能用的方案換成說明文字。
+
+| 方案 | 金額 | 點數 | 每點 |
+| --- | --- | --- | --- |
+| 輕量 | 300 | 6 | 50.0 |
+| 入門 | 500 | 12 | 41.7 |
+| 標準 | 1,000 | 30 | 33.3 |
+| 進階 | 10,000 | 500 | 20.0 |
+| 旗艦 | 30,000 | 2,000 | 15.0 |
+
+#### 電子發票（SmilePay 速買配）
+
+贊助不開發票（不是商品銷售），購買點數會開。發票走 SmilePay、金流走 PAYUNi，
+是兩套完全不同的憑證（`SMILEPAY_GRVC`／`SMILEPAY_VERIFY_KEY` 對 `PAYUNI_*`），規格見
+`docs/smilepay-api.md`。支援雲端發票、手機條碼載具、愛心捐贈與公司統編四種
+（型別與驗證在 `src/lib/invoice.ts`，前後端共用同一份規則）。
+
+發票資訊在**建立訂單時**就收下來存進 `sponsor_orders.invoice`（jsonb）：PAYUNi 的回傳只帶訂單編號，
+等 Notify 回來才開票，那時候前端早就離開頁面了。開票在確認付款成功之後（`src/server/smilepay-invoice.ts`），
+`data_id` 與 `orderid` 都填 MerTradeNo，所以同一筆訂單重複開會被 SmilePay 以 `-10072` 擋掉。
+
+**開票失敗不影響點數入帳**：錢收了、點數要給，發票晚一點補開。失敗原因記在 `invoice_error`，
+migration 建了對應的部分索引，可以直接撈出「收了錢但沒開票」的訂單。
+
+免費額度則是記在瀏覽器，只擋得住一般使用：`/api/divination` 沒有身分驗證，
+清掉瀏覽器資料就會重新拿到免費額度。要真的擋住得先有伺服器端的身分。
+
 ### 被分享紀錄（`/shared`）
 
 別人在 LINE 上邀請你、你按下接受之後，他的紀錄就會出現在這裡。每個人一張卡片，下面列出可查看的日子，
@@ -266,8 +354,8 @@ npm run dev
 
 - **帳號**：只支援 LINE 登入。未登入顯示「用 LINE 登入」；已登入可改顯示名稱並登出
   （日記資料仍留在本機）。手機從右上角頭貼進入此頁。
-- **傳送到 LINE 群組**：開關、群組名稱、群組 ID、傳送時機（完成當日紀錄時／只在我按下分享時）。
-  設定後，每日紀錄頁的分享按鈕會顯示成「分享到〈群組名稱〉」。
+- **常傳的 LINE 對象**：把常傳的群組或個人記成一份名單。紀錄頁按「分享成圖片」時會先列出這份名單
+  讓你挑一個並確認，送出後記下使用時間，最近用過的排前面。
 - **分享給誰看**：用 LINE 送出邀請。每張邀請可獨立設定「完整內容」或「只看心情」，
   對方接受前顯示邀請碼、可以再分享一次或複製連結，接受後換成對方的 LINE 身分。
 - 外觀切換、JSON 匯出與匯入。
@@ -279,9 +367,21 @@ npm run dev
 
 分享的識別為什麼不用 email、`liff.shareTargetPicker()` 怎麼接，見下面的「部署規劃」。
 
-LINE 的自動推送需要後端：Messaging API 的 channel access token 不能放在瀏覽器，前端也無法直接呼叫
-`api.line.me`。因此現階段設定只負責保存，實際送出走「分享成圖片 → 系統分享面板 → LINE」這條路徑，
-在手機上等同於直接把整頁圖片傳進群組。接上後端之後的做法見下方「部署規劃」。
+### 為什麼不做自動推送
+
+送出一律走「分享成圖片 → 系統分享面板 → LINE」，由使用者按下按鈕才發生，不做排程推送。
+
+技術上，Messaging API 的 channel access token 不能放在瀏覽器，前端也無法直接呼叫 `api.line.me`，
+所以自動推送一定要有後端加上 Cloud Scheduler。但決定性的理由是成本：push 的計費單位是
+**收得到訊息的人數**，推一個 5 人群組算 5 則，每天推一次就是每月 150 則；台灣免費方案每月
+只有 200 則，而且免費與中用量方案都不可加購，額度用完 API 直接回錯誤、訊息就是發不出去。
+相對地，從使用者自己的 LINE 帳號送出的訊息不計入官方帳號額度，無限免費。
+
+代價是不能自動化，所以改成「先選對象再確認送出」把手動流程做順：對象名單存在
+`settings.line.targets`，紀錄頁的 `ShareTargetPicker` 負責挑選與確認。要注意名單只記名字，
+瀏覽器沒有辦法把訊息直接投進指定的群組，最後一步仍然是 LINE 自己的選擇畫面。
+
+之後若真的需要定時提醒，用原生推播（APNs／FCM）或 Web Push 不按則數計費，比走 LINE 划算。
 
 ## 技術結構
 
@@ -297,7 +397,7 @@ src/
 │  ├─ apple-icon.tsx       iOS 主畫面圖示，用 next/og 產生 180×180 PNG
 │  └─ manifest.ts          網頁版「加到主畫面」的 PWA manifest
 ├─ components/
-│  ├─ app-shell.tsx        桌機側邊欄 + 手機底部導覽
+│  ├─ app-shell.tsx        桌機側邊欄 + 手機底部導覽與側邊抽屜
 │  ├─ pep-talk-banner.tsx  頂部貼齊的打氣小語彈層（點太陽隱藏）
 │  ├─ service-worker.tsx   註冊 public/sw.js（只在正式建置）
 │  ├─ calendar/            月曆、每週完成率與完成度圖例
@@ -366,12 +466,11 @@ src/
 | --- | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | 前端＋後端 | OAuth 轉回來的位址、分享連結 |
 | `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | 前端 | 瀏覽器端的 Supabase client，權限由 RLS 決定 |
-| `SUPABASE_SECRET_KEY` | 只在伺服器 | 繞過 RLS 的操作（推送排程、比對分享關係）、註冊 custom provider |
+| `SUPABASE_SECRET_KEY` | 只在伺服器 | 繞過 RLS 的操作（比對分享關係）、註冊 custom provider |
 | `SUPABASE_DB_URL` | 只在本機／CI | 跑 migration，Cloud Run 請用 pooler 的 6543 埠 |
 | `LINE_LOGIN_CHANNEL_ID`、`LINE_LOGIN_CHANNEL_SECRET` | 只在本機 | 跑一次性的 `createProvider` 腳本 |
 | `NEXT_PUBLIC_LIFF_ID` | 前端 | 叫出 LINE 的好友選擇畫面來發邀請 |
-| `LINE_MESSAGING_CHANNEL_SECRET`、`LINE_MESSAGING_CHANNEL_ACCESS_TOKEN` | 只在伺服器 | 驗 webhook 簽章、推送紀錄 |
-| `CRON_SECRET` | 只在伺服器 | Cloud Scheduler 呼叫推送端點時的共享密鑰 |
+| `LINE_MESSAGING_CHANNEL_SECRET`、`LINE_MESSAGING_CHANNEL_ACCESS_TOKEN` | 只在伺服器 | 驗 webhook 簽章；目前不做推送，先保留 |
 
 Supabase 的 `anon` / `service_role` 這組 JWT 金鑰會在 2026 年底停用，新專案請直接用
 `sb_publishable_...` / `sb_secret_...`。
@@ -460,9 +559,14 @@ LINE 有兩個限制決定了做法：**沒有好友清單 API，也不能用 LI
 
 首次／更新部署：
 
+`NEXT_PUBLIC_LIFF_ID` 一定要跟著 `--build-arg` 進去。`.dockerignore` 擋掉了 `.env`，
+漏帶的話編出來的 bundle 裡它是空字串，正式站的 LINE 登入會一直回「目前只能用 LINE 登入」。
+
 ```bash
 gcloud config set project daily-506100
-gcloud builds submit --tag asia-east1-docker.pkg.dev/daily-506100/daily/web:latest
+gcloud builds submit \
+  --config cloudbuild.yaml \
+  --substitutions _LIFF_ID=<LIFF ID>
 gcloud run deploy daily \
   --image asia-east1-docker.pkg.dev/daily-506100/daily/web:latest \
   --region asia-east1 \
@@ -472,8 +576,8 @@ gcloud run deploy daily \
 ```
 
 服務 URL（自動產生）：https://daily-946947125216.asia-east1.run.app  
-正式網域計畫綁 `daily.introvsita.ai`（DNS 指向 Cloud Run 後再跑
-`gcloud run domain-mappings create --service=daily --domain=daily.introvsita.ai --region=asia-east1`）。
+正式網域 `daily.introvista.ai` 已經綁好並對外服務，`NEXT_PUBLIC_SITE_URL` 要跟它一致——
+PAYUNi 的 ReturnURL／NotifyURL 是用這個值組出來的，指錯網域付款就永遠不會被確認。
 PAYUNi／SmilePay 等機密請放 Secret Manager，再掛到 Cloud Run，不要烤進映像。
 
 ## 贊助金流：PAYUNi 付款 + SmilePay 發票
@@ -602,9 +706,8 @@ Error: Cannot depend on path (\\?\UNC\...\tsconfig.json) outside of root directo
 - 接上 Supabase 與 LINE 登入（規劃見上方「部署規劃」，資料層的接縫在 `src/lib/storage.ts`）
 - 照片與自訂心情圖示改存 Supabase Storage，只在資料庫留 URL；`src/lib/images.ts` 的壓縮可以保留，
   但一天 6 張的上限與「裝置儲存空間不足」的提示就可以拿掉
-- LINE Messaging API 的推送端點：由後端保管 token，在每日紀錄完成時送圖片到設定的群組
 - 分享關係的後端實作：以 LINE 邀請連結建立關聯（見「部署規劃」），`/shared` 改為讀取 API 而非本機資料
 - 贊助訂單改存 Supabase（取代 `src/server/support-orders.ts` 的記憶體 Map），並加上贊助紀錄與補開發票的後台
 - 原生殼專案（iOS／Android）與上架前的待辦，見「包成 App」最後一段
 - 搜尋與標籤
-- 提醒通知（同時是 App Store 4.2 需要的原生價值）
+- 提醒通知：走原生推播／Web Push，不按則數計費（同時是 App Store 4.2 需要的原生價值）

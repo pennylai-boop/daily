@@ -4,6 +4,7 @@
  * 有設定 `RESEND_API_KEY` 時用 Resend 寄出；未設定時只記 log。
  */
 
+import { formatRedeemCode } from "@/lib/divination-credits";
 import { formatAmount } from "@/lib/support";
 
 type MailResult = { ok: true } | { ok: false; message: string };
@@ -43,8 +44,9 @@ async function sendMail(params: {
     });
 
     if (!response.ok) {
-      const detail = await response.text();
-      return { ok: false, message: `Resend ${response.status}: ${detail.slice(0, 200)}` };
+      // 401 幾乎都是金鑰失效，403 則多半是寄件網域還沒在 Resend 驗證，錯誤內容本身可能是空的。
+      const detail = (await response.text()).slice(0, 200) || "（回應沒有內容）";
+      return { ok: false, message: `Resend ${response.status} from=${from}: ${detail}` };
     }
 
     return { ok: true };
@@ -71,6 +73,36 @@ export async function sendSponsorThankYou(params: {
       "",
       `謝謝你贊助天天 daily ${formatAmount(params.amount)}。`,
       "這份心意會變成繼續維護的動力，讓更多人能安靜地寫下自己的日子。",
+      "",
+      `訂單編號：${params.merTradeNo}`,
+      "",
+      "—— 天天 daily",
+    ].join("\n"),
+  });
+}
+
+export async function sendCreditCode(params: {
+  email: string;
+  name: string;
+  credits: number;
+  amount: number;
+  code: string;
+  merTradeNo: string;
+}): Promise<MailResult> {
+  const greeting = params.name.trim() || "朋友";
+  return sendMail({
+    to: params.email,
+    subject: `你的卜卦點數兌換碼（${params.credits} 點）`,
+    text: [
+      `${greeting}，你好：`,
+      "",
+      `謝謝你購買天天 daily 的卜卦點數 ${params.credits} 點（${formatAmount(params.amount)}）。`,
+      "",
+      `兌換碼：${formatRedeemCode(params.code)}`,
+      "",
+      "打開「卜卦」頁，額度用完時會出現輸入框，把這組碼填進去就能開始用點數。",
+      "這封信請留著：點數的餘額記在我們這邊，換手機或清掉瀏覽器資料之後，",
+      "重新輸入同一組碼就能接回剩下的點數。也因為這樣，請不要把它轉給別人。",
       "",
       `訂單編號：${params.merTradeNo}`,
       "",

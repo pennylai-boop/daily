@@ -13,8 +13,14 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_SITE_URL=https://daily.introvsita.ai
+# .dockerignore 擋掉了 .env，所以這些值一定要從 --build-arg 進來，
+# 沒帶就會編出一個空字串的 bundle（例如 LINE 登入會變成永遠「無法使用」）。
+ARG NEXT_PUBLIC_SITE_URL=https://daily.introvista.ai
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+
+ARG NEXT_PUBLIC_LIFF_ID=
+ENV NEXT_PUBLIC_LIFF_ID=$NEXT_PUBLIC_LIFF_ID
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

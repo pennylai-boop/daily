@@ -12,7 +12,8 @@ import { TEMPLATES } from "@/lib/templates";
 import { createId } from "@/lib/storage";
 import { DEFAULT_TIMER, type MetricFieldDef, type Routine, type RoutineFrequency, type TimerDefaults } from "@/lib/types";
 
-type RoutineDraft = Omit<Routine, "id" | "createdAt">;
+/** updatedAt 由 store 在寫入時自己蓋上，表單不碰。 */
+type RoutineDraft = Omit<Routine, "id" | "createdAt" | "updatedAt">;
 
 const FREQUENCY_TABS: { kind: RoutineFrequency["kind"]; label: string }[] = [
   { kind: "daily", label: "每天" },
@@ -58,6 +59,12 @@ export function RoutineForm({
     },
   );
 
+  // 目前的圖示可能來自書寫格式（例如觀心書的 💭）或舊版清單，不在建議裡也要看得到並保得住。
+  const emojiOptions =
+    draft.emoji && !ROUTINE_EMOJIS.includes(draft.emoji)
+      ? [draft.emoji, ...ROUTINE_EMOJIS]
+      : ROUTINE_EMOJIS;
+
   const metricReady =
     draft.template !== "metric" ||
     (draft.metricFields ?? []).some((field) => field.label.trim().length > 0);
@@ -93,7 +100,7 @@ export function RoutineForm({
 
       <Field label="圖示">
         <div className="flex flex-wrap gap-1.5">
-          {ROUTINE_EMOJIS.map((emoji) => (
+          {emojiOptions.map((emoji) => (
             <button
               key={emoji}
               type="button"

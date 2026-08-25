@@ -1,6 +1,6 @@
 import { addDays, todayIso } from "./date";
 import { isRoutineDueOn } from "./routines";
-import { createId, createInviteCode, STORE_VERSION } from "./storage";
+import { createId, createInviteCode, EMPTY_DIVINATION, STORE_VERSION } from "./storage";
 import type {
   AppSettings,
   DailyState,
@@ -80,7 +80,7 @@ function demoMindfulness(seed: number) {
   };
 }
 
-const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt">[] = [
+const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
   {
     title: "寫日記",
     emoji: "✍️",
@@ -150,11 +150,10 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt">[] = [
 /** 產生約六週的示範資料，讓日曆與統計一眼就能看出樣貌。 */
 export function buildDemoState(): DailyState {
   const today = todayIso();
-  const routines: Routine[] = DEMO_ROUTINES.map((routine, index) => ({
-    ...routine,
-    id: createId(),
-    createdAt: new Date(Date.now() - (index + 1) * 86_400_000).toISOString(),
-  }));
+  const routines: Routine[] = DEMO_ROUTINES.map((routine, index) => {
+    const createdAt = new Date(Date.now() - (index + 1) * 86_400_000).toISOString();
+    return { ...routine, id: createId(), createdAt, updatedAt: createdAt };
+  });
 
   const diaryRoutine = routines.find((routine) => routine.template === "diary")!;
   const gratitudeRoutine = routines.find((routine) => routine.template === "gratitude")!;
@@ -248,6 +247,7 @@ export function buildDemoState(): DailyState {
     monthGoals: {},
     settings: buildDemoSettings(),
     sharedWithMe: buildDemoSharedJournals(),
+    divination: EMPTY_DIVINATION,
   };
 }
 
@@ -261,10 +261,10 @@ function buildDemoSettings(): AppSettings {
       avatarUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=daily-yeh",
     },
     line: {
-      enabled: true,
-      groupName: "家人群",
-      groupId: "Cf1a2b3c4d5e6f7a8",
-      trigger: "onComplete",
+      targets: [
+        { id: createId(), name: "家人群", lastUsedAt: "2026-08-24T13:20:00.000Z" },
+        { id: createId(), name: "阿霖", lastUsedAt: null },
+      ],
     },
     recipients: [
       {

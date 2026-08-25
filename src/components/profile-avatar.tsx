@@ -14,10 +14,13 @@ export function ProfileAvatar({
   profile,
   className,
   size = 32,
+  onNavigate,
 }: {
   profile: Profile;
   className?: string;
   size?: number;
+  /** 放在手機抽屜裡時用來順手關掉抽屜（已經在 /settings 的話不會換頁，不會自己關）。 */
+  onNavigate?: () => void;
 }) {
   const [broken, setBroken] = useState(false);
   const loggedIn = Boolean(profile.lineUserId);
@@ -27,6 +30,7 @@ export function ProfileAvatar({
   return (
     <Link
       href="/settings"
+      onClick={onNavigate}
       aria-label={loggedIn ? `${profile.name || "我的帳號"}` : "登入與設定"}
       className={cn(
         "flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-surface-muted text-sm font-semibold text-ink transition-opacity hover:opacity-90",

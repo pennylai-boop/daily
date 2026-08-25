@@ -5,7 +5,7 @@ export const LEGAL_EFFECTIVE_DATE = "2026 年 8 月 25 日";
 
 export const LEGAL_OPERATOR = "Introvsita";
 export const LEGAL_PRODUCT = "天天 daily";
-export const LEGAL_SITE = "daily.introvsita.ai";
+export const LEGAL_SITE = "daily.introvista.ai";
 
 function Article({ title, children }: { title: string; children: ReactNode }) {
   return (

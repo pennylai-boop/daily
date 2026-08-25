@@ -3,9 +3,35 @@
 import { useSyncExternalStore } from "react";
 
 import { createCustomMoodId } from "./moods";
+import { profileFromSession } from "./line-auth";
+import { getSupabaseBrowser } from "./supabase-browser";
+import {
+  createShareInviteRemote,
+  currentUserId,
+  deleteCustomMoodRemote,
+  deleteEntryRemote,
+  deleteLineTargetRemote,
+  deleteRecipientRemote,
+  deleteRoutineRemote,
+  fetchRecipients,
+  hasSession,
+  mergeStates,
+  pullRemoteState,
+  pushCustomMood,
+  pushEntry,
+  pushLineTarget,
+  pushPeriodGoals,
+  pushProfileSettings,
+  pushRoutine,
+  pushWholeState,
+  setRoutineCheckRemote,
+  setSessionUserId,
+  updateRecipientRemote,
+} from "./supabase-sync";
 import {
   createId,
   createInviteCode,
+  DIVINATION_HISTORY_LIMIT,
   EMPTY_STATE,
   loadState,
   normalizeState,
@@ -15,12 +41,14 @@ import type {
   CustomMood,
   DailyState,
   DayEntry,
+  DivinationRecord,
   FocusItem,
   IsoDate,
-  LineSettings,
+  LineShareTarget,
   MoodLevel,
   Profile,
   Routine,
+  SharedJournal,
   ShareRecipient,
   ShareScope,
 } from "./types";
@@ -89,10 +117,12 @@ function commit(updater: (current: DailyState) => DailyState): boolean {
 }
 
 export function saveEntry(entry: DayEntry): boolean {
-  return commit((current) => ({
+  const ok = commit((current) => ({
     ...current,
     entries: { ...current.entries, [entry.date]: entry },
   }));
+  if (ok && hasSession()) void pushEntry(entry);
+  return ok;
 }
 
 export function deleteEntry(date: IsoDate): void {
@@ -101,6 +131,7 @@ export function deleteEntry(date: IsoDate): void {
     delete entries[date];
     return { ...current, entries };
   });
+  if (hasSession()) void deleteEntryRemote(date);
 }
 
 export function addCustomMood(input: {
@@ -119,6 +150,7 @@ export function addCustomMood(input: {
   };
 
   const ok = commit((current) => ({ ...current, customMoods: [...current.customMoods, mood] }));
+  if (ok && hasSession()) void pushCustomMood(mood);
   return { ok, mood };
 }
 
@@ -138,25 +170,34 @@ export function removeCustomMood(id: string): void {
       customMoods: current.customMoods.filter((mood) => mood.id !== id),
     };
   });
+  if (hasSession()) void deleteCustomMoodRemote(id);
 }
 
-export function addRoutine(input: Omit<Routine, "id" | "createdAt">): void {
-  commit((current) => ({
-    ...current,
-    routines: [...current.routines, { ...input, id: createId(), createdAt: new Date().toISOString() }],
-  }));
+export function addRoutine(input: Omit<Routine, "id" | "createdAt" | "updatedAt">): void {
+  let created: Routine | null = null;
+  commit((current) => {
+    const now = new Date().toISOString();
+    const routine: Routine = { ...input, id: createId(), createdAt: now, updatedAt: now };
+    created = routine;
+    return { ...current, routines: [...current.routines, routine] };
+  });
+  if (created && hasSession()) void pushRoutine(created);
 }
 
 export function updateRoutine(
   id: string,
-  patch: Partial<Omit<Routine, "id" | "createdAt">>,
+  patch: Partial<Omit<Routine, "id" | "createdAt" | "updatedAt">>,
 ): void {
+  let updated: Routine | null = null;
   commit((current) => ({
     ...current,
-    routines: current.routines.map((routine) =>
-      routine.id === id ? { ...routine, ...patch } : routine,
-    ),
+    routines: current.routines.map((routine) => {
+      if (routine.id !== id) return routine;
+      updated = { ...routine, ...patch, updatedAt: new Date().toISOString() };
+      return updated;
+    }),
   }));
+  if (updated && hasSession()) void pushRoutine(updated);
 }
 
 export function deleteRoutine(id: string): void {
@@ -172,6 +213,7 @@ export function deleteRoutine(id: string): void {
       checks,
     };
   });
+  if (hasSession()) void deleteRoutineRemote(id);
 }
 
 /** 寫入某一週的目標清單；空陣列會清掉該 key。 */
@@ -182,6 +224,7 @@ export function setWeekGoals(weekStart: IsoDate, items: FocusItem[]): void {
     else delete weekGoals[weekStart];
     return { ...current, weekGoals };
   });
+  if (hasSession()) void pushPeriodGoals("week", weekStart, items);
 }
 
 /** 寫入某一個月的目標清單；`month` 為 `YYYY-MM`。 */
@@ -192,14 +235,17 @@ export function setMonthGoals(month: string, items: FocusItem[]): void {
     else delete monthGoals[month];
     return { ...current, monthGoals };
   });
+  if (hasSession()) void pushPeriodGoals("month", month, items);
 }
 
 export function toggleRoutineCheck(routineId: string, date: IsoDate): void {
+  let nowChecked = false;
   commit((current) => {
     const existing = current.checks[date] ?? [];
-    const nextIds = existing.includes(routineId)
-      ? existing.filter((id) => id !== routineId)
-      : [...existing, routineId];
+    nowChecked = !existing.includes(routineId);
+    const nextIds = nowChecked
+      ? [...existing, routineId]
+      : existing.filter((id) => id !== routineId);
 
     const checks = { ...current.checks };
     if (nextIds.length > 0) {
@@ -209,6 +255,7 @@ export function toggleRoutineCheck(routineId: string, date: IsoDate): void {
     }
     return { ...current, checks };
   });
+  if (hasSession()) void setRoutineCheckRemote(date, routineId, nowChecked);
 }
 
 export function updateProfile(patch: Partial<Profile>): void {
@@ -216,42 +263,71 @@ export function updateProfile(patch: Partial<Profile>): void {
     ...current,
     settings: { ...current.settings, profile: { ...current.settings.profile, ...patch } },
   }));
-}
-
-/** 套用 LINE 登入拿到的身分（名稱、userId、頭貼）。 */
-export function applyLineProfile(profile: Profile): void {
-  commit((current) => ({
-    ...current,
-    settings: {
-      ...current.settings,
-      profile: {
-        name: profile.name.trim() || current.settings.profile.name,
-        lineUserId: profile.lineUserId,
-        avatarUrl: profile.avatarUrl,
-      },
-    },
-  }));
+  syncProfileSettings();
 }
 
 /**
- * 登出：清掉 LINE 身分。本機的日記／事項資料仍留在這台裝置，
+ * 登出：清掉 LINE 身分、結束 Supabase session。本機的日記／事項資料仍留在這台裝置，
  * 要整包清掉請用設定裡的「清除全部資料」。
  */
 export function signOut(): void {
+  setSessionUserId(null);
   commit((current) => ({
     ...current,
     settings: {
       ...current.settings,
       profile: { name: "", lineUserId: "", avatarUrl: null },
+      recipients: [],
     },
   }));
 }
 
-export function updateLineSettings(patch: Partial<LineSettings>): void {
+function updateLineTargets(
+  update: (targets: LineShareTarget[]) => LineShareTarget[],
+): void {
   commit((current) => ({
     ...current,
-    settings: { ...current.settings, line: { ...current.settings.line, ...patch } },
+    settings: { ...current.settings, line: { targets: update(current.settings.line.targets) } },
   }));
+}
+
+/** 同名的對象不重複建立，直接沿用既有那一筆。 */
+export function addLineTarget(name: string): void {
+  const trimmed = name.trim().slice(0, 30);
+  if (!trimmed) return;
+
+  const existing = cache ?? loadState();
+  if (existing.settings.line.targets.some((target) => target.name === trimmed)) return;
+
+  const target: LineShareTarget = { id: createId(), name: trimmed, lastUsedAt: null };
+  updateLineTargets((targets) => [...targets, target]);
+  if (hasSession()) void pushLineTarget(target);
+}
+
+export function removeLineTarget(id: string): void {
+  updateLineTargets((targets) => targets.filter((target) => target.id !== id));
+  if (hasSession()) void deleteLineTargetRemote(id);
+}
+
+/** 送出後記一筆時間，讓最近用過的排在前面。 */
+export function markLineTargetUsed(id: string): void {
+  const now = new Date().toISOString();
+  let updatedTarget: LineShareTarget | null = null;
+  updateLineTargets((targets) =>
+    targets.map((target) => {
+      if (target.id !== id) return target;
+      updatedTarget = { ...target, lastUsedAt: now };
+      return updatedTarget;
+    }),
+  );
+  if (updatedTarget && hasSession()) void pushLineTarget(updatedTarget);
+}
+
+/** pepTalk 跟 profile 存在同一張 profiles 表，任何一邊變動都整包 upsert。 */
+function syncProfileSettings(): void {
+  if (!hasSession()) return;
+  const current = cache ?? loadState();
+  void pushProfileSettings(current.settings.profile, current.settings.pepTalk);
 }
 
 export function setPepTalkVisible(visible: boolean): void {
@@ -262,6 +338,7 @@ export function setPepTalkVisible(visible: boolean): void {
       pepTalk: { ...current.settings.pepTalk, visible },
     },
   }));
+  syncProfileSettings();
 }
 
 /** 確保設定裡有一份可編輯清單（若還在用預設，先複製一份再改）。 */
@@ -284,6 +361,7 @@ export function setPepTalkQuote(index: number, text: string): void {
       },
     };
   });
+  syncProfileSettings();
 }
 
 export function addPepTalkQuote(text: string): boolean {
@@ -300,6 +378,7 @@ export function addPepTalkQuote(text: string): boolean {
       },
     };
   });
+  syncProfileSettings();
   return true;
 }
 
@@ -320,6 +399,7 @@ export function removePepTalkQuote(index: number): void {
       },
     };
   });
+  syncProfileSettings();
 }
 
 export function resetPepTalkQuotes(): void {
@@ -330,18 +410,28 @@ export function resetPepTalkQuotes(): void {
       pepTalk: { ...current.settings.pepTalk, quotes: null },
     },
   }));
+  syncProfileSettings();
 }
 
-/** 建立一張待接受的邀請，回傳邀請碼給呼叫端組成連結送出。 */
-export function createInvite(input: { name: string; scope: ShareScope }): ShareRecipient {
+/**
+ * 建立一張待接受的邀請，回傳邀請碼給呼叫端組成連結送出。
+ * 邀請要有真實的 owner_id 才有意義，所以要求先登入；沒登入回傳 null。
+ */
+export async function createInvite(input: { name: string; scope: ShareScope }): Promise<ShareRecipient | null> {
+  if (!hasSession()) return null;
+
+  const token = createInviteCode();
+  const ok = await createShareInviteRemote({ token, name: input.name, scope: input.scope });
+  if (!ok) return null;
+
   const recipient: ShareRecipient = {
-    id: createId(),
+    id: token,
     name: input.name,
     lineUserId: null,
     avatarUrl: null,
     scope: input.scope,
     status: "pending",
-    inviteCode: createInviteCode(),
+    inviteCode: token,
     createdAt: new Date().toISOString(),
     acceptedAt: null,
   };
@@ -357,67 +447,166 @@ export function createInvite(input: { name: string; scope: ShareScope }): ShareR
   return recipient;
 }
 
+/** 用 Supabase session 的 access token 呼叫 /api/shared，整包覆蓋 sharedWithMe。 */
+export async function refreshSharedJournals(): Promise<void> {
+  const supabase = getSupabaseBrowser();
+  if (!supabase) return;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) return;
+
+  try {
+    const response = await fetch("/api/shared", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as { journals?: SharedJournal[] };
+    commit((current) => ({ ...current, sharedWithMe: data.journals ?? current.sharedWithMe }));
+  } catch {
+    // 靜默失敗，畫面維持上次快取的內容。
+  }
+}
+
+/** 重新整理「設定 → 分享給誰看」清單（owner 自己的待接受邀請 + 已接受的分享）。 */
+export async function refreshRecipients(): Promise<void> {
+  const userId = currentUserId();
+  if (!userId) return;
+  const recipients = await fetchRecipients(userId);
+  commit((current) => ({ ...current, settings: { ...current.settings, recipients } }));
+}
+
 /**
- * 對方用 LINE 登入後接受邀請。
- *
- * 後端上線後會由伺服器比對邀請碼並寫入 LINE 回傳的身分；
- * 目前這一層只在同一個瀏覽器裡生效，用來預覽接受之後的樣子。
+ * 對方登入後用邀請碼接受分享；一律經 /api/invite/accept（跨使用者寫入需要 service role）。
+ * 成功後順便重新整理自己的「被分享紀錄」，讓分享者馬上看到。
  */
-export function acceptInvite(
-  code: string,
-  visitor: { name: string; lineUserId: string; avatarUrl?: string | null },
-): boolean {
-  const current = cache ?? loadState();
-  const target = current.settings.recipients.find(
-    (recipient) => recipient.inviteCode === code && recipient.status === "pending",
-  );
-  if (!target) return false;
+export async function acceptInvite(
+  token: string,
+): Promise<{ ok: true; ownerName: string } | { ok: false; error: string }> {
+  const supabase = getSupabaseBrowser();
+  if (!supabase) return { ok: false, error: "這個環境還沒有設定 Supabase。" };
 
-  commit((state) => ({
-    ...state,
-    settings: {
-      ...state.settings,
-      recipients: state.settings.recipients.map((recipient) =>
-        recipient.id === target.id
-          ? {
-              ...recipient,
-              // 分享者自己寫的稱呼優先，沒寫才用對方的 LINE 顯示名稱。
-              name: recipient.name || visitor.name,
-              lineUserId: visitor.lineUserId,
-              avatarUrl: visitor.avatarUrl ?? null,
-              status: "accepted",
-              acceptedAt: new Date().toISOString(),
-            }
-          : recipient,
-      ),
-    },
-  }));
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) return { ok: false, error: "請先登入。" };
 
-  return true;
+  try {
+    const response = await fetch("/api/invite/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ token }),
+    });
+    const data = (await response.json()) as { ok?: boolean; ownerName?: string; error?: string };
+    if (!response.ok || !data.ok) return { ok: false, error: data.error ?? "接受邀請失敗。" };
+
+    void refreshSharedJournals();
+    return { ok: true, ownerName: data.ownerName ?? "對方" };
+  } catch {
+    return { ok: false, error: "連線失敗，請稍後再試。" };
+  }
 }
 
 export function updateRecipient(
   id: string,
   patch: Partial<Omit<ShareRecipient, "id" | "createdAt">>,
 ): void {
+  let updated: ShareRecipient | null = null;
   commit((current) => ({
     ...current,
     settings: {
       ...current.settings,
-      recipients: current.settings.recipients.map((recipient) =>
-        recipient.id === id ? { ...recipient, ...patch } : recipient,
-      ),
+      recipients: current.settings.recipients.map((recipient) => {
+        if (recipient.id !== id) return recipient;
+        updated = { ...recipient, ...patch };
+        return updated;
+      }),
+    },
+  }));
+  if (updated && hasSession()) void updateRecipientRemote(updated, { scope: patch.scope });
+}
+
+export function removeRecipient(id: string): void {
+  const current = cache ?? loadState();
+  const target = current.settings.recipients.find((recipient) => recipient.id === id) ?? null;
+
+  commit((state) => ({
+    ...state,
+    settings: {
+      ...state.settings,
+      recipients: state.settings.recipients.filter((recipient) => recipient.id !== id),
+    },
+  }));
+  if (target && hasSession()) void deleteRecipientRemote(target);
+}
+
+/**
+ * 登入後把本機資料跟雲端合併：全新帳號整包上傳本機資料，回頭登入則逐筆比較新舊
+ * （見 supabase-sync.ts 的 mergeStates）。也會一併拉一次「被分享紀錄」與分享名單。
+ */
+export async function syncOnLogin(user: {
+  id: string;
+  user_metadata?: Record<string, unknown> | null;
+  identities?: { provider: string; identity_data?: Record<string, unknown> | null }[] | null;
+}): Promise<void> {
+  setSessionUserId(user.id);
+  const profile = profileFromSession(user);
+  const localBefore = cache ?? loadState();
+
+  const remote = await pullRemoteState(user.id);
+  const merged = mergeStates(localBefore, remote, profile);
+  commit(() => merged);
+
+  await pushWholeState(merged, user.id);
+  await Promise.all([refreshRecipients(), refreshSharedJournals()]);
+}
+
+/**
+ * 記下一卦並扣掉額度。
+ *
+ * 只在 AI 解讀成功之後才呼叫：起卦失敗或解讀失敗都不該扣額度。
+ * 用點數時真正的扣款已經由伺服器做完，這裡只把它回報的餘額抄下來顯示。
+ */
+export function commitDivination(
+  input: Omit<DivinationRecord, "id" | "createdAt" | "paidWith">,
+  paid: { with: "free" } | { with: "credit"; remaining: number },
+): void {
+  const record: DivinationRecord = {
+    ...input,
+    id: createId(),
+    createdAt: new Date().toISOString(),
+    paidWith: paid.with,
+  };
+
+  commit((state) => ({
+    ...state,
+    divination: {
+      ...state.divination,
+      lastFreeCastAt: paid.with === "free" ? record.createdAt : state.divination.lastFreeCastAt,
+      credits: paid.with === "credit" ? paid.remaining : state.divination.credits,
+      history: [record, ...state.divination.history].slice(0, DIVINATION_HISTORY_LIMIT),
     },
   }));
 }
 
-export function removeRecipient(id: string): void {
+/** 綁定一組兌換碼並記下伺服器回報的餘額。 */
+export function setDivinationCredits(code: string, remaining: number): void {
   commit((current) => ({
     ...current,
-    settings: {
-      ...current.settings,
-      recipients: current.settings.recipients.filter((recipient) => recipient.id !== id),
+    divination: {
+      ...current.divination,
+      creditCode: code,
+      credits: Math.max(0, Math.trunc(remaining)),
     },
+  }));
+}
+
+export function clearDivinationCredits(): void {
+  commit((current) => ({
+    ...current,
+    divination: { ...current.divination, creditCode: null, credits: 0 },
   }));
 }
 
@@ -444,9 +633,10 @@ export interface DailyStore {
   setMonthGoals: typeof setMonthGoals;
   toggleRoutineCheck: typeof toggleRoutineCheck;
   updateProfile: typeof updateProfile;
-  applyLineProfile: typeof applyLineProfile;
   signOut: typeof signOut;
-  updateLineSettings: typeof updateLineSettings;
+  addLineTarget: typeof addLineTarget;
+  removeLineTarget: typeof removeLineTarget;
+  markLineTargetUsed: typeof markLineTargetUsed;
   setPepTalkVisible: typeof setPepTalkVisible;
   setPepTalkQuote: typeof setPepTalkQuote;
   addPepTalkQuote: typeof addPepTalkQuote;
@@ -456,6 +646,12 @@ export interface DailyStore {
   acceptInvite: typeof acceptInvite;
   updateRecipient: typeof updateRecipient;
   removeRecipient: typeof removeRecipient;
+  refreshRecipients: typeof refreshRecipients;
+  refreshSharedJournals: typeof refreshSharedJournals;
+  syncOnLogin: typeof syncOnLogin;
+  commitDivination: typeof commitDivination;
+  setDivinationCredits: typeof setDivinationCredits;
+  clearDivinationCredits: typeof clearDivinationCredits;
   replaceState: typeof replaceState;
   resetAll: typeof resetAll;
 }
@@ -477,9 +673,10 @@ export function useDailyStore(): DailyStore {
     setMonthGoals,
     toggleRoutineCheck,
     updateProfile,
-    applyLineProfile,
     signOut,
-    updateLineSettings,
+    addLineTarget,
+    removeLineTarget,
+    markLineTargetUsed,
     setPepTalkVisible,
     setPepTalkQuote,
     addPepTalkQuote,
@@ -489,6 +686,12 @@ export function useDailyStore(): DailyStore {
     acceptInvite,
     updateRecipient,
     removeRecipient,
+    refreshRecipients,
+    refreshSharedJournals,
+    syncOnLogin,
+    commitDivination,
+    setDivinationCredits,
+    clearDivinationCredits,
     replaceState,
     resetAll,
   };

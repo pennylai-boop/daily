@@ -1,0 +1,21 @@
+# Cloud Build：建映像並推到 Artifact Registry。
+#
+# 用設定檔而不是 `gcloud builds submit --tag`，是因為 --tag 沒有辦法帶 --build-arg，
+# 而 NEXT_PUBLIC_* 是建置期就寫進 bundle 的值，只在 Cloud Run 設執行期環境變數不會生效。
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_SITE_URL=${_SITE_URL}
+      - --build-arg=NEXT_PUBLIC_LIFF_ID=${_LIFF_ID}
+      - --tag=${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _IMAGE: asia-east1-docker.pkg.dev/daily-506100/daily/web:latest
+  _SITE_URL: https://daily.introvista.ai
+  _LIFF_ID: ""

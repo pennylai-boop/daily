@@ -4,8 +4,12 @@ import type {
   CustomMood,
   DailyState,
   DayEntry,
+  DivinationRecord,
+  DivinationState,
   EntryBlock,
   EntryPhoto,
+  LineSettings,
+  LineShareTarget,
   MetricFieldDef,
   MoodLevel,
   Profile,
@@ -27,12 +31,26 @@ export const THEME_KEY = "daily.theme";
  * 6：定期目標頁加入週／月目標條列。
  * 7：專注模式計時佇列。
  * 8：定期事項新增計時、紀錄兩種格式。
+ * 9：LINE 從自動推送改成手動選對象，群組 ID 與傳送時機不再使用。
+ * 10：卜卦的免費額度、點數與歷史紀錄。
+ * 11：定期事項加上 updatedAt，登入同步到 Supabase 時用來判斷本機／雲端哪一份較新。
  */
-export const STORE_VERSION = 8;
+export const STORE_VERSION = 11;
+
+/** 卜卦：三個月一輪的免費額度，還沒卜過的人第一次就是免費。 */
+export const EMPTY_DIVINATION: DivinationState = {
+  lastFreeCastAt: null,
+  creditCode: null,
+  credits: 0,
+  history: [],
+};
+
+/** 歷史只留最近幾筆：解讀是整段文字，全部留著會把 localStorage 吃掉。 */
+export const DIVINATION_HISTORY_LIMIT = 10;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   profile: { name: "", lineUserId: "", avatarUrl: null },
-  line: { enabled: false, groupName: "", groupId: "", trigger: "onComplete" },
+  line: { targets: [] },
   recipients: [],
   pepTalk: { visible: true, quotes: null },
 };
@@ -47,17 +65,17 @@ export const EMPTY_STATE: DailyState = {
   monthGoals: {},
   settings: DEFAULT_SETTINGS,
   sharedWithMe: [],
+  divination: EMPTY_DIVINATION,
 };
 
 /** 首次使用時帶入預設的定期事項，讓使用者一進來就能開始書寫。 */
 export function createInitialState(): DailyState {
   return {
     ...EMPTY_STATE,
-    routines: DEFAULT_ROUTINES.map((routine, index) => ({
-      ...routine,
-      id: createId(),
-      createdAt: new Date(Date.now() + index).toISOString(),
-    })),
+    routines: DEFAULT_ROUTINES.map((routine, index) => {
+      const createdAt = new Date(Date.now() + index).toISOString();
+      return { ...routine, id: createId(), createdAt, updatedAt: createdAt };
+    }),
   };
 }
 
@@ -121,6 +139,46 @@ export function normalizeState(value: unknown): DailyState {
     sharedWithMe: Array.isArray(candidate.sharedWithMe)
       ? candidate.sharedWithMe.map(normalizeJournal)
       : [],
+    divination: normalizeDivination(candidate.divination),
+  };
+}
+
+/** v9 以前沒有卜卦額度；沒有這份資料的人視為還沒用過免費額度。 */
+function normalizeDivination(value: unknown): DivinationState {
+  if (!isRecord(value)) return EMPTY_DIVINATION;
+
+  const history = Array.isArray(value.history)
+    ? value.history
+        .map(normalizeDivinationRecord)
+        .filter((record): record is DivinationRecord => record !== null)
+        .slice(0, DIVINATION_HISTORY_LIMIT)
+    : [];
+
+  return {
+    lastFreeCastAt: typeof value.lastFreeCastAt === "string" ? value.lastFreeCastAt : null,
+    creditCode: typeof value.creditCode === "string" && value.creditCode ? value.creditCode : null,
+    credits: Math.max(0, Math.trunc(Number(value.credits) || 0)),
+    history,
+  };
+}
+
+function normalizeDivinationRecord(value: unknown): DivinationRecord | null {
+  if (!isRecord(value)) return null;
+  const analysis = typeof value.analysis === "string" ? value.analysis : "";
+  const hexagramName = typeof value.hexagramName === "string" ? value.hexagramName : "";
+  if (!analysis || !hexagramName) return null;
+
+  return {
+    id: typeof value.id === "string" && value.id ? value.id : createId(),
+    question: typeof value.question === "string" ? value.question : "",
+    numbers: Array.isArray(value.numbers) ? value.numbers.map((n) => Number(n) || 0) : [],
+    hexagramName,
+    changedHexagramName:
+      typeof value.changedHexagramName === "string" ? value.changedHexagramName : "",
+    movingLine: Math.max(1, Math.min(6, Math.trunc(Number(value.movingLine) || 1))),
+    analysis,
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
+    paidWith: value.paidWith === "credit" ? "credit" : "free",
   };
 }
 
@@ -187,7 +245,7 @@ function mergeSettings(value: AppSettings | undefined): AppSettings {
   const pep = value.pepTalk;
   return {
     profile: normalizeProfile(value.profile),
-    line: { ...DEFAULT_SETTINGS.line, ...value.line },
+    line: normalizeLineSettings(value.line),
     recipients: Array.isArray(value.recipients) ? value.recipients.map(normalizeRecipient) : [],
     pepTalk: {
       visible: pep?.visible !== false,
@@ -196,6 +254,30 @@ function mergeSettings(value: AppSettings | undefined): AppSettings {
         : null,
     },
   };
+}
+
+/**
+ * v8 以前只存單一群組（名稱＋要推送用的群組 ID＋傳送時機）。
+ *
+ * 改成手動選對象之後群組 ID 和傳送時機都沒有用了，但填過的名字還是使用者的資料，
+ * 轉成清單裡的第一個對象留著。
+ */
+function normalizeLineSettings(value: LineSettings | undefined): LineSettings {
+  if (Array.isArray(value?.targets)) {
+    const targets = value.targets
+      .filter((target): target is LineShareTarget => !!target && typeof target === "object")
+      .map((target) => ({
+        id: typeof target.id === "string" && target.id ? target.id : createId(),
+        name: typeof target.name === "string" ? target.name.trim().slice(0, 30) : "",
+        lastUsedAt: typeof target.lastUsedAt === "string" ? target.lastUsedAt : null,
+      }))
+      .filter((target) => target.name.length > 0);
+    return { targets };
+  }
+
+  const legacyName = (value as unknown as { groupName?: string })?.groupName?.trim() ?? "";
+  if (!legacyName) return { targets: [] };
+  return { targets: [{ id: createId(), name: legacyName.slice(0, 30), lastUsedAt: null }] };
 }
 
 /** v2 以前 profile 存的是使用者自己打的 email，沒有經過驗證，改版後不再保留。 */
@@ -288,12 +370,14 @@ function normalizeBlock(block: EntryBlock): EntryBlock {
   };
 }
 
+/** v10 以前沒有 updatedAt；補上 createdAt 當作初始值，之後編輯才會真的往前推進。 */
 function withTemplate(routine: Routine): Routine {
   return {
     ...routine,
     template: (routine.template ?? null) as TemplateId | null,
     metricFields: normalizeMetricFields(routine.metricFields),
     timerDefaults: normalizeTimerDefaults(routine.timerDefaults),
+    updatedAt: typeof routine.updatedAt === "string" ? routine.updatedAt : routine.createdAt,
   };
 }
 

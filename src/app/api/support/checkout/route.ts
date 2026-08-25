@@ -37,7 +37,12 @@ export async function POST(request: Request) {
   }
 
   const merTradeNo = createMerTradeNo();
-  createOrder(merTradeNo, input);
+  try {
+    await createOrder(merTradeNo, input);
+  } catch (e) {
+    console.error("[support/checkout] 建立訂單失敗：", e);
+    return NextResponse.json({ error: "暫時無法建立贊助訂單，請稍後再試。" }, { status: 500 });
+  }
 
   const { action, fields } = buildUppRequest({
     config,

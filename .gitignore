@@ -43,6 +43,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# supabase CLI 的中繼檔（migration 本身要進版控）
+/supabase/.temp
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

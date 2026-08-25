@@ -75,6 +75,34 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
+/** 卦象：由上而下「陽、陰、陽」三爻，陰爻中間斷開。 */
+export function HexagramIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16" />
+      <path d="M4 12h5.5M14.5 12H20" />
+      <path d="M4 17h16" />
+    </Icon>
+  );
+}
+
+export function MicIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="9" y="2.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
+    </Icon>
+  );
+}
+
+export function MenuIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </Icon>
+  );
+}
+
 /** 橘色實心愛心；填色與描邊都跟 `currentColor`。 */
 export function HeartIcon({ strokeWidth = 1.6, ...props }: IconProps) {
   return (

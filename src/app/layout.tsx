@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import { AppShell } from "@/components/app-shell";
+import { LiffBootstrap } from "@/components/liff-bootstrap";
 import { ServiceWorkerRegistrar } from "@/components/service-worker";
 import { platformBootstrapScript } from "@/lib/platform";
 import { themeBootstrapScript } from "@/lib/theme";
@@ -8,7 +9,7 @@ import { themeBootstrapScript } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://daily.introvsita.ai"),
+  metadataBase: new URL("https://daily.introvista.ai"),
   title: {
     default: "天天 daily — 每日目標與定期事項的紀錄本",
     template: "%s ｜ 天天 daily",
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="flex min-h-full flex-col font-sans">
         <AppShell>{children}</AppShell>
+        <LiffBootstrap />
         <ServiceWorkerRegistrar />
       </body>
     </html>

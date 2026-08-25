@@ -159,6 +159,8 @@ export interface Routine {
   timerDefaults?: TimerDefaults;
   archived: boolean;
   createdAt: string;
+  /** 登入同步時用來判斷本機／雲端哪一份較新；沒登入過的舊資料以 createdAt 補上。 */
+  updatedAt: string;
 }
 
 /** 分享範圍：完整內容，或只公開心情與完成度。 */
@@ -188,12 +190,21 @@ export interface ShareRecipient {
   acceptedAt: string | null;
 }
 
+/**
+ * 常用的分享對象（LINE 群組或個人）。
+ *
+ * 只存名字：網頁沒有辦法指定訊息要進哪個群組，最後一步一定是 LINE 自己的選擇畫面，
+ * 所以這裡記的是「我上次傳給誰」，用來在送出前確認並提示要在 LINE 選哪一個。
+ */
+export interface LineShareTarget {
+  id: string;
+  name: string;
+  /** 最近一次選用的時間，用來把常用的排前面；從未用過為 null。 */
+  lastUsedAt: string | null;
+}
+
 export interface LineSettings {
-  enabled: boolean;
-  groupName: string;
-  groupId: string;
-  /** onComplete：當天有紀錄就送出；manual：只在按下分享時送出。 */
-  trigger: "onComplete" | "manual";
+  targets: LineShareTarget[];
 }
 
 export interface Profile {
@@ -219,6 +230,40 @@ export interface AppSettings {
   line: LineSettings;
   recipients: ShareRecipient[];
   pepTalk: PepTalkSettings;
+}
+
+/** 卜過的卦。免費額度用完之後還看得到上一次問的是什麼。 */
+export interface DivinationRecord {
+  id: string;
+  question: string;
+  numbers: number[];
+  hexagramName: string;
+  changedHexagramName: string;
+  movingLine: number;
+  analysis: string;
+  createdAt: string;
+  /** 這一卦是用免費額度還是點數換的。 */
+  paidWith: "free" | "credit";
+}
+
+/**
+ * 卜卦的額度。
+ *
+ * 卦算的是當下的天時地利人和，效期大約三個月，所以免費額度也以三個月為一輪；
+ * 想在同一輪裡再問，就用點數換。
+ */
+export interface DivinationState {
+  /** 上一次用掉免費額度的時間；null 表示這輪還沒用過。 */
+  lastFreeCastAt: string | null;
+  /**
+   * 點數兌換碼。餘額的真正來源在伺服器，這裡只留憑據：
+   * 清掉瀏覽器資料或換裝置後，重新輸入信件裡的同一組碼就能接回剩下的點數。
+   */
+  creditCode: string | null;
+  /** 伺服器回報的剩餘點數，只用來顯示與判斷要不要給按鈕。 */
+  credits: number;
+  /** 由新到舊，只留最近幾筆。 */
+  history: DivinationRecord[];
 }
 
 /** 別人分享給我的紀錄本。 */
@@ -251,6 +296,7 @@ export interface DailyState {
   monthGoals: PeriodGoalMap;
   settings: AppSettings;
   sharedWithMe: SharedJournal[];
+  divination: DivinationState;
 }
 
 export type ThemePreference = "light" | "dark" | "system";

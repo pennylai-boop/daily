@@ -3,7 +3,7 @@ import type { IsoDate, Routine, RoutineFrequency } from "./types";
 
 export const ROUTINE_EMOJIS = [
   "❤️",
-  "💭",
+  "⚖️",
   "✍️",
   "🧘",
   "🏃",
@@ -23,7 +23,7 @@ export const ROUTINE_EMOJIS = [
  * 首次使用時預設帶入的定期事項。
  * 三種書寫格式本身就是定期事項，打勾後會展開讓使用者填寫。
  */
-export const DEFAULT_ROUTINES: Omit<Routine, "id" | "createdAt">[] = [
+export const DEFAULT_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
   {
     title: "五感恩",
     emoji: "❤️",

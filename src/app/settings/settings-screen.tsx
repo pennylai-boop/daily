@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { LinkIcon, ShareIcon, TrashIcon } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -10,13 +10,14 @@ import { cn } from "@/components/ui/cn";
 import { Field, TextInput } from "@/components/ui/field";
 import { Segmented, Switch } from "@/components/ui/segmented";
 import { Card, Chip, PageHeading, SectionHeading } from "@/components/ui/surfaces";
+import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account";
 import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
 import { copyInviteUrl, shareInvite } from "@/lib/line-invite";
-import { signInWithLine, signOutFromLine } from "@/lib/line-auth";
+import { signInWithLine } from "@/lib/line-auth";
 import { DEFAULT_PEP_TALKS, resolvePepTalks } from "@/lib/pep-talk";
 import { recordedDates } from "@/lib/stats";
-import { useDailyStore } from "@/lib/store";
+import { refreshRecipients, useDailyStore } from "@/lib/store";
 import { normalizeState } from "@/lib/storage";
 import { setThemePreference, useThemePreference } from "@/lib/theme";
 import type { Profile, ShareRecipient, ShareScope, ThemePreference } from "@/lib/types";
@@ -26,11 +27,6 @@ const THEME_OPTIONS = [
   { value: "dark", label: "深色" },
   { value: "system", label: "跟隨系統" },
 ] as const satisfies readonly { value: ThemePreference; label: string }[];
-
-const TRIGGER_OPTIONS = [
-  { value: "onComplete", label: "完成當日紀錄時" },
-  { value: "manual", label: "只在我按下分享時" },
-] as const;
 
 const SCOPE_OPTIONS = [
   { value: "full", label: "完整內容" },
@@ -44,7 +40,7 @@ export function SettingsScreen() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const { profile, line } = state.settings;
+  const { profile } = state.settings;
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -71,7 +67,7 @@ export function SettingsScreen() {
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeading
         title="設定"
-        description="帳號、通知與分享、資料備份；打氣小語與法律條款在頁面最下方。"
+        description="帳號、分享對象、資料備份；打氣小語與法律條款在頁面最下方。"
         action={
           <Segmented
             options={THEME_OPTIONS}
@@ -95,63 +91,7 @@ export function SettingsScreen() {
         />
       </Card>
 
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="傳送到 LINE 群組"
-          description={
-            <>
-              每日紀錄完成後，把當天的內容送到指定的 LINE 群組。
-              自動推送需要後端串接 LINE Messaging API（前端無法直接呼叫，token 也不能放在瀏覽器）。
-              目前設定會先保存下來；在每日紀錄頁按「分享成圖片」，手機的分享面板選 LINE
-              就能立刻送到這個群組。
-            </>
-          }
-          action={
-            <Switch
-              checked={line.enabled}
-              onChange={(enabled) => store.updateLineSettings({ enabled })}
-              label="啟用 LINE 通知"
-            />
-          }
-        />
-
-        {line.enabled ? (
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="群組名稱" htmlFor="line-group-name">
-                <TextInput
-                  id="line-group-name"
-                  value={line.groupName}
-                  maxLength={30}
-                  placeholder="例如：家人群"
-                  onChange={(event) => store.updateLineSettings({ groupName: event.target.value })}
-                />
-              </Field>
-              <Field
-                label="群組 ID"
-                hint="從 LINE Messaging API 的 webhook 取得，格式為 C 開頭的字串。"
-                htmlFor="line-group-id"
-              >
-                <TextInput
-                  id="line-group-id"
-                  value={line.groupId}
-                  placeholder="Cxxxxxxxxxxxxxxxx"
-                  onChange={(event) => store.updateLineSettings({ groupId: event.target.value })}
-                />
-              </Field>
-            </div>
-
-            <Field label="傳送時機">
-              <Segmented
-                options={TRIGGER_OPTIONS}
-                value={line.trigger}
-                onChange={(trigger) => store.updateLineSettings({ trigger })}
-                ariaLabel="傳送時機"
-              />
-            </Field>
-          </div>
-        ) : null}
-      </Card>
+      <ShareTargetsCard />
 
       <ShareCard />
 
@@ -190,7 +130,7 @@ export function SettingsScreen() {
         <dl className="mt-3 space-y-2 text-[13px]">
           {[
             ["產品名稱", "天天 daily"],
-            ["網域", "daily.introvsita.ai"],
+            ["網域", "daily.introvista.ai"],
             ["使用地區", "台灣（繁體中文）"],
           ].map(([label, value]) => (
             <div key={label} className="flex gap-3">
@@ -208,11 +148,6 @@ export function SettingsScreen() {
   );
 }
 
-/** LINE userId 很長且沒有可讀性，只留頭尾當作連結狀態的佐證。 */
-function maskLineUserId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
-
 function AccountPanel({
   profile,
   onMessage,
@@ -228,13 +163,8 @@ function AccountPanel({
     setBusy(true);
     try {
       const result = await signInWithLine();
-      if (result.status === "ok") {
-        store.applyLineProfile(result.profile);
-        onMessage("已用 LINE 登入。");
-      } else if (result.status === "unavailable") {
-        onMessage(result.reason);
-      }
-      // redirect：LIFF 會整頁轉走，這裡不用做事。
+      if (result.status === "unavailable") onMessage(result.reason);
+      // redirect：瀏覽器會整頁轉去 LINE 的登入頁，回來後由 app-shell 偵測 session 並同步資料。
     } catch {
       onMessage("LINE 登入沒有成功，請稍後再試。");
     } finally {
@@ -243,20 +173,11 @@ function AccountPanel({
   };
 
   const logout = async () => {
-    if (!window.confirm("確定要登出嗎？這台裝置上的日記與事項會留著，只是解除 LINE 帳號。")) {
-      return;
-    }
+    if (!window.confirm(SIGN_OUT_CONFIRM)) return;
     setBusy(true);
-    try {
-      await signOutFromLine();
-      store.signOut();
-      onMessage("已登出。");
-    } catch {
-      store.signOut();
-      onMessage("已登出（本機狀態已清除）。");
-    } finally {
-      setBusy(false);
-    }
+    const cleared = await performSignOut();
+    setBusy(false);
+    onMessage(cleared ? "已登出。" : "已登出（本機狀態已清除）。");
   };
 
   if (!loggedIn) {
@@ -441,12 +362,92 @@ function LegalLinks() {
   );
 }
 
+/**
+ * 常傳的 LINE 群組／對象清單。
+ *
+ * 只記名字。網頁沒辦法指定訊息進哪個群組，最後一步一定是 LINE 自己的選擇畫面，
+ * 這份清單的作用是在紀錄頁送出前讓使用者確認要傳給誰，並提示在 LINE 要選哪一個。
+ */
+function ShareTargetsCard() {
+  const store = useDailyStore();
+  const { targets } = store.state.settings.line;
+  const [name, setName] = useState("");
+
+  const add = () => {
+    if (!name.trim()) return;
+    store.addLineTarget(name);
+    setName("");
+  };
+
+  return (
+    <Card className="px-4 py-4 sm:px-5">
+      <SectionHeading
+        title="常傳的 LINE 對象"
+        description="先把常傳的群組或對象記下來，之後在每日紀錄頁按送出時就能直接挑一個、確認後再開分享面板。"
+      />
+
+      <div className="mt-4 flex flex-wrap items-end gap-2">
+        <div className="min-w-48 flex-1">
+          <Field label="名稱" htmlFor="line-target-name">
+            <TextInput
+              id="line-target-name"
+              value={name}
+              maxLength={30}
+              placeholder="例如：家人群"
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  add();
+                }
+              }}
+            />
+          </Field>
+        </div>
+        <Button variant="secondary" onClick={add} disabled={!name.trim()}>
+          新增
+        </Button>
+      </div>
+
+      {targets.length > 0 ? (
+        <ul className="mt-4 space-y-2">
+          {targets.map((target) => (
+            <li
+              key={target.id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2"
+            >
+              <span className="min-w-0 truncate text-sm text-ink">{target.name}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`移除${target.name}`}
+                onClick={() => store.removeLineTarget(target.id)}
+              >
+                <TrashIcon className="size-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 text-[13px] text-ink-muted">
+          還沒有記錄任何對象。沒有也可以照常分享，只是每次都要自己在 LINE 裡找。
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function ShareCard() {
   const store = useDailyStore();
   const { profile, recipients } = store.state.settings;
   const [name, setName] = useState("");
   const [scope, setScope] = useState<ShareScope>("full");
   const [note, setNote] = useState<string | null>(null);
+
+  // 分享名單可能因為對方剛接受而在雲端變了，進頁面時重新拉一次。
+  useEffect(() => {
+    if (profile.lineUserId) void refreshRecipients();
+  }, [profile.lineUserId]);
 
   const send = async (recipient: ShareRecipient) => {
     try {
@@ -502,10 +503,20 @@ function ShareCard() {
         className="mt-4 space-y-3 border-t border-line pt-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const recipient = store.createInvite({ name: name.trim(), scope });
-          setName("");
-          setScope("full");
-          void send(recipient);
+          if (!profile.lineUserId) {
+            setNote("要先用 LINE 登入才能送出邀請。");
+            return;
+          }
+          void (async () => {
+            const recipient = await store.createInvite({ name: name.trim(), scope });
+            if (!recipient) {
+              setNote("邀請建立失敗，請稍後再試。");
+              return;
+            }
+            setName("");
+            setScope("full");
+            void send(recipient);
+          })();
         }}
       >
         <TextInput

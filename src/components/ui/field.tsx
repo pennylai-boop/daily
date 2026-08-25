@@ -1,6 +1,6 @@
 "use client";
 
-import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { InfoHint } from "./info-hint";
 import { cn } from "./cn";
@@ -11,11 +11,11 @@ const CONTROL_BASE =
   "px-3 py-2.5 text-base sm:text-sm transition-colors hover:border-ink-subtle " +
   "focus:border-accent focus:outline-none focus:ring-2 focus:ring-[var(--ring)]";
 
-export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function TextInput({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(CONTROL_BASE, className)} {...props} />;
 }
 
-export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea({ className, ...props }: ComponentProps<"textarea">) {
   return <textarea className={cn(CONTROL_BASE, "prose-zh resize-y", className)} {...props} />;
 }
 

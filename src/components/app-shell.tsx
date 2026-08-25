@@ -2,22 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+import { AccountFooter } from "@/components/account-footer";
 import {
   CalendarIcon,
+  CloseIcon,
   GearIcon,
   HeartIcon,
+  HexagramIcon,
+  MenuIcon,
   RepeatIcon,
   SparkIcon,
   SunIcon,
   UsersIcon,
 } from "@/components/icons";
 import { PepTalkBanner } from "@/components/pep-talk-banner";
+import { PointsBadge } from "@/components/points-badge";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { cn } from "@/components/ui/cn";
 import { resolvePepTalks } from "@/lib/pep-talk";
-import { useDailyStore } from "@/lib/store";
+import { signOut, syncOnLogin, useDailyStore } from "@/lib/store";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { currentUserId } from "@/lib/supabase-sync";
+import type { Profile } from "@/lib/types";
 
 /**
  * primary 的項目在手機版顯示為底部分頁，其餘收進手機版頂端列。
@@ -27,24 +35,80 @@ const NAV_ITEMS = [
   { href: "/", label: "日曆", Icon: CalendarIcon, primary: true, hideInIosApp: false },
   { href: "/routines", label: "定期目標", Icon: RepeatIcon, primary: true, hideInIosApp: false },
   { href: "/insights", label: "回顧", Icon: SparkIcon, primary: true, hideInIosApp: false },
-  { href: "/shared", label: "被分享紀錄", Icon: UsersIcon, primary: true, hideInIosApp: false },
-  // 手機改放右上角橘色愛心；桌機側欄仍列出。iOS App 內隱藏（App Store 規則）。
+  { href: "/divination", label: "卜卦", Icon: HexagramIcon, primary: true, hideInIosApp: false },
+  // 手機從左上角選單進入，底部分頁留給每天會用到的四項。
+  { href: "/shared", label: "被分享紀錄", Icon: UsersIcon, primary: false, hideInIosApp: false },
+  // 手機另有右上角橘色愛心；桌機側欄仍列出。iOS App 內隱藏（App Store 規則）。
   { href: "/support", label: "支持", Icon: HeartIcon, primary: false, hideInIosApp: true },
-  // 手機只靠右上角頭貼進設定；桌機側欄仍列出這一項。
   { href: "/settings", label: "設定", Icon: GearIcon, primary: false, hideInIosApp: false },
 ] as const;
 
 const TAB_ITEMS = NAV_ITEMS.filter((item) => item.primary);
 const SIDEBAR_ITEMS = NAV_ITEMS;
 
+function isActiveHref(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" || pathname.startsWith("/entry") : pathname.startsWith(href);
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { state, ready } = useDailyStore();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPathname, setMenuPathname] = useState(pathname);
   const pepVisible =
     ready && state.settings.pepTalk.visible && resolvePepTalks(state.settings.pepTalk.quotes).length > 0;
+  // 登入後資料會同步到帳號，「只在這台裝置」就不再成立。等 ready 才判斷，免得先閃一次錯的說法。
+  const showLocalDataNote = ready && !state.settings.profile.lineUserId;
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" || pathname.startsWith("/entry") : pathname.startsWith(href);
+  const isActive = (href: string) => isActiveHref(pathname, href);
+
+  // 換頁就收起選單。抽屜裡的連結本來就會關，這裡處理的是上一頁／下一頁。
+  if (menuPathname !== pathname) {
+    setMenuPathname(pathname);
+    setMenuOpen(false);
+  }
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menuOpen]);
+
+  // 全站只在這裡監聽 Supabase 的登入狀態：有新的 session 就把本機資料同步上去，
+  // 登出就清掉本機的 LINE 身分（日記／事項資料留著）。
+  useEffect(() => {
+    const supabase = getSupabaseBrowser();
+    if (!supabase) return;
+
+    let cancelled = false;
+
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      if (!cancelled && user && currentUserId() !== user.id) void syncOnLogin(user);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        if (currentUserId()) signOut();
+        return;
+      }
+      const user = session?.user;
+      if (user && currentUserId() !== user.id) void syncOnLogin(user);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -64,35 +128,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             <BrandMark />
             <ProfileAvatar profile={state.settings.profile} size={36} />
           </div>
-          <nav className="mt-8 flex flex-col gap-1">
-            {SIDEBAR_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isActive(item.href) ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                  isActive(item.href)
-                    ? "bg-brand font-medium text-on-brand"
-                    : "text-ink-muted hover:bg-surface-muted hover:text-ink",
-                  item.hideInIosApp && "hide-in-ios-app",
-                )}
-              >
-                <item.Icon
-                  className={cn(
-                    "size-5",
-                    item.href === "/support" &&
-                      (isActive(item.href) ? "text-on-brand" : "text-brand"),
-                  )}
-                />
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <p className="mt-auto pt-8 text-xs leading-relaxed text-ink-subtle">
-            資料目前儲存在這台裝置的瀏覽器中。
-          </p>
+          {/* 側欄只有 15rem 寬，點數擠不進品牌那一列，自己佔一行。 */}
+          <PointsBadge divination={state.divination} className="mt-5 self-start" />
+          <SidebarNav pathname={pathname} className="mt-5" />
+          {showLocalDataNote ? <LocalDataNote className="mt-auto pt-8" /> : null}
         </aside>
+
+        <MobileMenu
+          pathname={pathname}
+          profile={state.settings.profile}
+          showLocalDataNote={showLocalDataNote}
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header
@@ -107,9 +155,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 !pepVisible && "pt-[env(safe-area-inset-top)]",
               )}
             >
+              <button
+                type="button"
+                aria-label="開啟選單"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen(true)}
+                className="-ml-2 flex size-10 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+              >
+                <MenuIcon className="size-6" />
+              </button>
               <BrandMark compact />
+              {/* 頂端列不放頭貼：身分與登出都收在左側抽屜底部。 */}
               <div className="ml-auto flex items-center gap-2">
-                <ProfileAvatar profile={state.settings.profile} size={32} />
+                <PointsBadge divination={state.divination} />
                 <Link
                   href="/support"
                   aria-label="支持"
@@ -162,6 +220,113 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </div>
     </div>
+  );
+}
+
+function SidebarNav({
+  pathname,
+  className,
+  onNavigate,
+}: {
+  pathname: string;
+  className?: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <nav className={cn("flex flex-col gap-1", className)}>
+      {SIDEBAR_ITEMS.map((item) => {
+        const active = isActiveHref(pathname, item.href);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+              active
+                ? "bg-brand font-medium text-on-brand"
+                : "text-ink-muted hover:bg-surface-muted hover:text-ink",
+              item.hideInIosApp && "hide-in-ios-app",
+            )}
+          >
+            <item.Icon
+              className={cn(
+                "size-5",
+                item.href === "/support" && (active ? "text-on-brand" : "text-brand"),
+              )}
+            />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** 手機版的左側抽屜：底部分頁放不下的項目都從這裡進入。 */
+function MobileMenu({
+  pathname,
+  profile,
+  showLocalDataNote,
+  open,
+  onClose,
+}: {
+  pathname: string;
+  profile: Profile;
+  showLocalDataNote: boolean;
+  open: boolean;
+  onClose: () => void;
+}) {
+  // z-index 要壓過打氣小語橫幅（z-60），不然抽屜開著時橫幅會蓋在上面。
+  return (
+    <div inert={!open} className="fixed inset-0 z-[70] lg:hidden">
+      <div
+        aria-hidden
+        onClick={onClose}
+        className={cn(
+          "absolute inset-0 bg-ink/40 transition-opacity duration-200",
+          open ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <div
+        role="dialog"
+        aria-modal={open}
+        aria-label="選單"
+        className={cn(
+          "absolute inset-y-0 left-0 flex w-[78%] max-w-72 flex-col overflow-y-auto bg-surface px-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] pt-[calc(env(safe-area-inset-top,0px)+16px)] shadow-[4px_0_18px_rgba(17,24,39,0.14)] transition-transform duration-200",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <BrandMark />
+          <button
+            type="button"
+            aria-label="關閉選單"
+            onClick={onClose}
+            className="flex size-10 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+          >
+            <CloseIcon className="size-5" />
+          </button>
+        </div>
+        <SidebarNav pathname={pathname} className="mt-6" onNavigate={onClose} />
+        {/* 帳號區要貼著抽屜底部，mt-auto 掛在這層，說明文字有沒有出現都不影響。 */}
+        <div className="mt-auto pt-8">
+          {showLocalDataNote ? <LocalDataNote className="mb-4" /> : null}
+          {/* 負的 mx 讓分隔線橫跨整個抽屜寬度，內容仍對齊上面的選單。 */}
+          <AccountFooter profile={profile} onNavigate={onClose} className="-mx-4 px-4" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 未登入時才成立的提醒：資料只在這台瀏覽器裡，換裝置或清掉就沒了。 */
+function LocalDataNote({ className }: { className?: string }) {
+  return (
+    <p className={cn("text-xs leading-relaxed text-ink-subtle", className)}>
+      資料目前儲存在這台裝置的瀏覽器中。
+    </p>
   );
 }
 

@@ -9,28 +9,8 @@
  * 包成 App 之後一定走不到 LIFF（那是 LINE 自己瀏覽器裡的 API），因此第二順位是原生殼的分享橋接。
  */
 
+import { ensureLiff } from "./liff";
 import { hasNativeShare, nativeShare } from "./native-bridge";
-
-interface LiffLike {
-  init: (config: { liffId: string }) => Promise<void>;
-  isLoggedIn: () => boolean;
-  login: (config?: { redirectUri?: string }) => void;
-  logout: () => void;
-  getProfile: () => Promise<{
-    userId: string;
-    displayName: string;
-    pictureUrl?: string;
-  }>;
-  isApiAvailable: (name: string) => boolean;
-  /** 使用者按取消時回傳 null。 */
-  shareTargetPicker: (messages: unknown[]) => Promise<{ status: string } | null>;
-}
-
-declare global {
-  interface Window {
-    liff?: LiffLike;
-  }
-}
 
 /** line：LINE 好友選擇畫面；share：系統分享面板；clipboard：已複製連結。 */
 export type InviteChannel = "line" | "share" | "clipboard" | "cancelled";
@@ -49,13 +29,14 @@ export async function shareInvite(ownerName: string, code: string): Promise<Invi
   const url = inviteUrl(code);
   const text = inviteMessage(ownerName, url);
 
-  const liff = window.liff;
+  // 一定要先 init 過，`isApiAvailable` 才判斷得準，`shareTargetPicker` 也才叫得動。
+  const liff = await ensureLiff();
   if (liff?.isApiAvailable("shareTargetPicker")) {
     try {
       const result = await liff.shareTargetPicker([{ type: "text", text }]);
       return result ? "line" : "cancelled";
     } catch {
-      // LIFF 尚未 init 或使用者未登入時往下退回其他管道。
+      // 使用者未登入或 LINE 版本太舊時往下退回其他管道。
     }
   }
 

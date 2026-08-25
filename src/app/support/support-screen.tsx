@@ -9,6 +9,7 @@ import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { InfoHint } from "@/components/ui/info-hint";
 import { Segmented } from "@/components/ui/segmented";
 import { Card, PageHeading, SectionHeading } from "@/components/ui/surfaces";
+import { postToGateway } from "@/lib/payment-form";
 import { usePlatform } from "@/lib/platform";
 import {
   createSponsorInput,
@@ -291,21 +292,3 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-[13px] font-semibold text-alert">{message}</p>;
 }
 
-/** 動態組一張隱藏表單送去金流，付款頁需要 top-level 的表單導覽。 */
-function postToGateway(action: string, fields: Record<string, string>) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = action;
-  form.style.display = "none";
-
-  for (const [name, value] of Object.entries(fields)) {
-    const field = document.createElement("input");
-    field.type = "hidden";
-    field.name = name;
-    field.value = value;
-    form.appendChild(field);
-  }
-
-  document.body.appendChild(form);
-  form.submit();
-}
