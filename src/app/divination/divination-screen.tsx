@@ -696,17 +696,18 @@ function HistoryTable({ records }: { records: DivinationRecord[] }) {
       <SectionHeading
         title="卜卦紀錄"
         description="卦象與解讀不能修改。附註是留給你自己的：當時怎麼讀、後來實際怎麼發展。"
+        action={
+          <div className="w-40 shrink-0 sm:w-56">
+            <TextInput
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜尋問題、卦名或附註"
+              aria-label="搜尋卜卦紀錄"
+            />
+          </div>
+        }
       />
-
-      <div className="mt-3 max-w-xs">
-        <TextInput
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜尋問題、卦名或附註"
-          aria-label="搜尋卜卦紀錄"
-        />
-      </div>
 
       {filtered.length === 0 ? (
         <p className="mt-4 text-[13px] text-ink-subtle">

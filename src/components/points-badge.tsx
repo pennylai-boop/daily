@@ -28,7 +28,7 @@ export function PointsBadge({
       href="/divination/credits"
       aria-label={`剩餘卜卦點數 ${divination.credits} 點，前往儲值`}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-tint px-2.5 py-1 text-[12px] font-semibold tabular-nums text-brand-strong transition-opacity hover:opacity-80",
+        "inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold tabular-nums text-brand-strong transition-opacity hover:opacity-80",
         className,
       )}
     >

@@ -575,14 +575,18 @@ LINE 有兩個限制決定了做法：**沒有好友清單 API，也不能用 LI
 
 首次／更新部署：
 
-`NEXT_PUBLIC_LIFF_ID` 一定要跟著 `--build-arg` 進去。`.dockerignore` 擋掉了 `.env`，
-漏帶的話編出來的 bundle 裡它是空字串，正式站的 LINE 登入會一直回「目前只能用 LINE 登入」。
+`NEXT_PUBLIC_LIFF_ID`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+一定要跟著 `--substitutions` 進去。`.dockerignore` 擋掉了 `.env`，漏帶的話編出來的 bundle
+裡它們是空字串：`NEXT_PUBLIC_LIFF_ID` 漏帶會讓正式站的 LINE 登入一直回「目前只能用 LINE 登入」；
+`NEXT_PUBLIC_SUPABASE_URL`／`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 漏帶則是瀏覽器端
+`getSupabaseBrowser()` 一律回傳 `null`，LINE 登入按鈕點下去只會顯示「這個環境還沒有設定
+Supabase」，帳號區永遠停在「尚未登入」、也不會有頭貼。
 
 ```bash
 gcloud config set project daily-506100
 gcloud builds submit \
   --config cloudbuild.yaml \
-  --substitutions _LIFF_ID=<LIFF ID>
+  --substitutions _LIFF_ID=<LIFF ID>,_SUPABASE_URL=<Supabase Project URL>,_SUPABASE_PUBLISHABLE_KEY=<sb_publishable_...>
 gcloud run deploy daily \
   --image asia-east1-docker.pkg.dev/daily-506100/daily/web:latest \
   --region asia-east1 \
