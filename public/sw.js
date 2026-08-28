@@ -8,9 +8,11 @@
  * - /api、/support* 與 /divination/credits*：完全不碰。付款與點數餘額一定要即時，不能給到舊的畫面
  *
  * 改動這個檔案時記得同時改 VERSION，舊快取才會在啟用階段被清掉。
+ * NEXT_PUBLIC_* 是建置期烤進 bundle 的，換掉它們的值等於換掉一批 chunk 的內容；
+ * 這種部署也要跟著進 VERSION，否則舊 chunk 會一直留在 ASSET_CACHE 裡被 cache-first 命中。
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `daily-shell-${VERSION}`;
 const ASSET_CACHE = `daily-assets-${VERSION}`;
 const SHELL_ROUTES = ["/", "/routines", "/insights", "/divination", "/shared", "/settings"];
@@ -72,7 +74,9 @@ self.addEventListener("fetch", (event) => {
 async function networkFirstPage(request) {
   const cache = await caches.open(SHELL_CACHE);
   try {
-    const response = await fetch(request);
+    // cache: "reload" 跳過瀏覽器自己的 HTTP 快取。頁面回應帶的是 s-maxage，
+    // 少了這個，舊的 HTML 可能被撈出來、又被寫回 SHELL_CACHE，指向的還是舊 chunk。
+    const response = await fetch(request, { cache: "reload" });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {

@@ -582,6 +582,11 @@ LINE 有兩個限制決定了做法：**沒有好友清單 API，也不能用 LI
 `getSupabaseBrowser()` 一律回傳 `null`，LINE 登入按鈕點下去只會顯示「這個環境還沒有設定
 Supabase」，帳號區永遠停在「尚未登入」、也不會有頭貼。
 
+補帶 build-arg 重新部署時，[`public/sw.js`](public/sw.js) 的 `VERSION` 也要跟著加一號。
+`/_next/static` 走 cache-first，`activate` 只清掉名字對不上的快取；`VERSION` 沒動的話，
+上一版那批「值是空字串」的 chunk 會一直留在 `daily-assets-<VERSION>` 裡被命中，
+瀏覽器看到的還是舊行為，跟正式站實際送出的內容無關。
+
 ```bash
 gcloud config set project daily-506100
 gcloud builds submit \
