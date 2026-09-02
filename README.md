@@ -510,7 +510,7 @@ await supabase.auth.admin.customProviders.createProvider({
   client_secret: process.env.LINE_LOGIN_CHANNEL_SECRET,
   authorization_url: "https://access.line.me/oauth2/v2.1/authorize",
   token_url: "https://api.line.me/oauth2/v2.1/token",
-  userinfo_url: "https://api.line.me/v2/profile",
+  userinfo_url: "https://daily.introvista.ai/api/auth/line-userinfo",
   scopes: ["profile", "openid"],
   email_optional: true,              // /v2/profile 不回 email
   attribute_mapping: { sub: "userId", name: "displayName", picture: "pictureUrl" },
@@ -518,13 +518,20 @@ await supabase.auth.admin.customProviders.createProvider({
 });
 ```
 
-三個關鍵：
+四個關鍵：
 
 - **一定要用 `oauth2` 而不是 `oidc`。** LINE 的 `id_token` 是用 channel secret 以 HS256 簽章，
   Supabase 的 OIDC 流程會去 JWKS 驗非對稱簽章，驗不過。
-- **`attribute_mapping` 不能省。** LINE 的 `/v2/profile` 回的是 `userId`，不是 OAuth2 慣例的 `sub`，
-  沒對應的話登入會走完整個流程、最後失敗在 `missing provider id`。若欄位名稱與上面不同，
-  以 `createProvider` 回傳的內容為準。
+- **userinfo 不能直接打 LINE 的 `/v2/profile`。** 它回的是 `userId` 不是 `sub`。
+  `attribute_mapping` 在目前的 Auth 上是 Claims 解完才套用，`userId` 那時已經被丟掉，
+  所以 mapping 設了也一樣 `missing provider id`（supabase/auth#2519）。
+  [`/api/auth/line-userinfo`](src/app/api/auth/line-userinfo/route.ts) 先轉成 `sub` 再給
+  Supabase；這個 URL 是 Auth 伺服器打的，必須是公開的正式站，不能填 localhost。
+- **Site URL 必須是正式站。** Dashboard → Authentication → URL Configuration：
+  Site URL = `https://daily.introvista.ai`，Redirect URLs 加上
+  `https://daily.introvista.ai/**` 與本機用的 `http://localhost:3000/**`。
+  Site URL 若還停在 `http://localhost:3000`，正式站登入走完也會被退回本機
+  （本機沒開 server 就是「localhost 拒絕連線」）。
 - **`bot_prompt=aggressive` 讓登入順便加好友。** 沒成為好友就推不了訊息。推到群組則是把官方帳號邀進群，
   從 webhook 事件取得 `groupId`（「設定 → 傳送到 LINE 群組」現在手填的那格就能自動帶入）。
 

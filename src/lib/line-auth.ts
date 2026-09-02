@@ -25,7 +25,7 @@ export async function signInWithLine(): Promise<LineLoginResult> {
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "custom:line",
-    options: { redirectTo: window.location.href },
+    options: { redirectTo: loginRedirectTo() },
   });
 
   if (error) {
@@ -34,6 +34,23 @@ export async function signInWithLine(): Promise<LineLoginResult> {
 
   // signInWithOAuth 會直接把瀏覽器導去 LINE 的登入頁，這裡回傳的 redirect 只是形式上結束這次呼叫。
   return { status: "redirect" };
+}
+
+/**
+ * 正式站一律回到 NEXT_PUBLIC_SITE_URL（建置期烤進去的 https://daily.introvista.ai），
+ * 避免從 Cloud Run 預設網域或錯誤的 host 登入後被導去別的地方。
+ * 本機 SITE_URL 是 localhost，就跟現在這個分頁走。
+ *
+ * 真正能不能回到這個網址，還是看 Supabase Dashboard → Authentication → URL Configuration
+ * 的 Site URL／Redirect URLs 有沒有把它列入。沒列入時 GoTrue 會退回 Site URL，
+ * 而 Site URL 若還是 http://localhost:3000，正式站登入成功也會跳到本機。
+ */
+function loginRedirectTo(): string {
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+  if (site && !/localhost|127\.0\.0\.1/.test(site)) {
+    return `${site}${window.location.pathname}${window.location.search}`;
+  }
+  return window.location.href;
 }
 
 /**
