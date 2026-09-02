@@ -62,6 +62,37 @@ export async function copyInviteUrl(code: string): Promise<void> {
   await copyText(inviteUrl(code));
 }
 
+export type LinePickResult = "line" | "unavailable" | "cancelled";
+
+/**
+ * 打開 LINE 原生的好友／群組列表讓使用者選一個聊天室。
+ * LINE 基於隱私不會回傳選到誰，選完會送出一則短訊到該聊天室，我們再把顯示名稱記在本機。
+ */
+export async function pickLineChat(): Promise<LinePickResult> {
+  const liff = await ensureLiff();
+  if (!liff?.isApiAvailable("shareTargetPicker")) return "unavailable";
+
+  if (!liff.isLoggedIn()) {
+    liff.login({ redirectUri: window.location.href });
+    return "unavailable";
+  }
+
+  try {
+    const result = await liff.shareTargetPicker(
+      [
+        {
+          type: "text",
+          text: "已把這個聊天室加入天天 daily 的常傳名單。之後日記頁按「傳送今天」就會傳到這裡。",
+        },
+      ],
+      { isMultiple: false },
+    );
+    return result ? "line" : "cancelled";
+  } catch {
+    return "unavailable";
+  }
+}
+
 /**
  * Android WebView 常常沒有 navigator.clipboard（需要 HTTPS 與額外權限），
  * 所以退回舊的 execCommand 做法，至少複製得到連結。

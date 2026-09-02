@@ -83,19 +83,19 @@ export function MonthCalendar({ monthIso, today, state, onMonthChange }: MonthCa
             size="sm"
             variant="ghost"
             aria-label="上一個月"
-            className="size-8 shrink-0 border border-line-strong p-0"
+            className="size-10 shrink-0 p-0"
             onClick={() => onMonthChange(addMonths(monthIso, -1))}
           >
-            <ChevronLeftIcon className="size-7" strokeWidth={2.4} />
+            <ChevronLeftIcon className="size-8" strokeWidth={2.4} />
           </Button>
           <Button
             size="sm"
             variant="ghost"
             aria-label="下一個月"
-            className="size-8 shrink-0 border border-line-strong p-0"
+            className="size-10 shrink-0 p-0"
             onClick={() => onMonthChange(addMonths(monthIso, 1))}
           >
-            <ChevronRightIcon className="size-7" strokeWidth={2.4} />
+            <ChevronRightIcon className="size-8" strokeWidth={2.4} />
           </Button>
         </div>
       </header>

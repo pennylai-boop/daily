@@ -47,6 +47,7 @@ import type {
   DayEntry,
   DivinationRecord,
   FocusItem,
+  FocusRunKind,
   FocusSession,
   IsoDate,
   LineShareTarget,
@@ -663,15 +664,19 @@ export function setFocusPomodoroMinutes(minutes: number): void {
   }));
 }
 
-export function startFocusSession(minutes?: number): void {
-  const planned = clampFocusMinutes(minutes ?? focusOf(cache ?? loadState()).pomodoroMinutes);
+export function startFocusSession(minutes?: number, kind: FocusRunKind = "timed"): void {
+  const planned =
+    kind === "open"
+      ? 0
+      : clampFocusMinutes(minutes ?? focusOf(cache ?? loadState()).pomodoroMinutes);
   commit((current) => ({
     ...current,
     focus: {
       ...focusOf(current),
-      pomodoroMinutes: planned,
+      ...(kind === "timed" ? { pomodoroMinutes: planned } : {}),
       runningStartedAt: new Date().toISOString(),
       runningPlannedMinutes: planned,
+      runningKind: kind,
     },
   }));
 }
@@ -683,17 +688,19 @@ export function finishFocusSession(completed: boolean): void {
     const running = focus.runningStartedAt;
     if (!running) return current;
 
+    const open = focus.runningKind === "open";
     const cap = focus.runningPlannedMinutes * 60;
-    const elapsed = Math.min(cap, focusElapsedSeconds(focus));
+    const rawElapsed = focusElapsedSeconds(focus);
+    const elapsed = open ? rawElapsed : Math.min(cap, rawElapsed);
     const now = new Date().toISOString();
     const session: FocusSession = {
       id: createId(),
       date: todayIso(),
       plannedMinutes: focus.runningPlannedMinutes,
-      elapsedSeconds: Math.max(0, completed ? cap : elapsed),
+      elapsedSeconds: Math.max(0, open ? elapsed : completed ? cap : elapsed),
       startedAt: running,
       endedAt: now,
-      completed,
+      completed: open ? true : completed,
     };
 
     return {
@@ -701,6 +708,7 @@ export function finishFocusSession(completed: boolean): void {
       focus: {
         ...focus,
         runningStartedAt: null,
+        runningKind: "timed",
         sessions: [...focus.sessions, session].slice(-200),
       },
     };

@@ -130,6 +130,17 @@ export function formatFullDate(iso: IsoDate): string {
   }`;
 }
 
+/** 分享圖左上角用的英文週別與月日，例如 Tues. / 09.01。 */
+const CARD_WEEKDAYS = ["Sun.", "Mon.", "Tues.", "Wed.", "Thurs.", "Fri.", "Sat."];
+
+export function formatCardDate(iso: IsoDate): { weekday: string; monthDay: string } {
+  const date = fromIsoDate(iso);
+  return {
+    weekday: CARD_WEEKDAYS[date.getDay()],
+    monthDay: `${`${date.getMonth() + 1}`.padStart(2, "0")}.${`${date.getDate()}`.padStart(2, "0")}`,
+  };
+}
+
 /** 手機版標題用的短日期，例如「8 月 17 日 週一」。 */
 export function formatShortDate(iso: IsoDate): string {
   const date = fromIsoDate(iso);

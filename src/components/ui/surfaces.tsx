@@ -47,7 +47,7 @@ export function SectionHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-1">
         <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
         {description ? <InfoHint label={`${title}的說明`}>{description}</InfoHint> : null}

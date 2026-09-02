@@ -6,6 +6,7 @@
  * 前端呼叫時帶 `Authorization: Bearer <access_token>`（supabase.auth.getSession() 拿得到）。
  */
 
+import { createInviteCode, STANDING_INVITE_NAME } from "@/lib/storage";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import type { DayEntry, SharedJournal, ShareScope } from "@/lib/types";
 
@@ -40,14 +41,16 @@ type PeekResult =
 /** 邀請落地頁用：不需要登入就能看發出邀請的人是誰、分享範圍是什麼，只是不能拿來接受。 */
 export async function peekInvite(token: string): Promise<PeekResult> {
   const supabase = getSupabaseAdmin();
+  const normalized = token.trim().toUpperCase();
 
   const { data: invite } = await supabase
     .from("share_invites")
-    .select("owner_id, scope, status")
-    .eq("token", token)
+    .select("owner_id, scope, status, name")
+    .eq("token", normalized)
     .maybeSingle();
 
-  if (!invite || invite.status !== "pending") {
+  const standing = invite?.name === STANDING_INVITE_NAME;
+  if (!invite || (!standing && invite.status !== "pending")) {
     return { ok: false, status: 404, error: "找不到這張邀請，可能已經被使用或過期。" };
   }
 
@@ -64,15 +67,18 @@ type AcceptResult = { ok: true; ownerName: string } | { ok: false; status: numbe
 
 export async function acceptInvite(userId: string, token: string): Promise<AcceptResult> {
   const supabase = getSupabaseAdmin();
+  const normalized = token.trim().toUpperCase();
 
   const { data: invite } = await supabase
     .from("share_invites")
     .select("*")
-    .eq("token", token)
-    .eq("status", "pending")
+    .eq("token", normalized)
     .maybeSingle();
 
-  if (!invite) return { ok: false, status: 404, error: "找不到這張邀請，可能已經被使用或過期。" };
+  const standing = invite?.name === STANDING_INVITE_NAME;
+  if (!invite || (!standing && invite.status !== "pending")) {
+    return { ok: false, status: 404, error: "找不到這張邀請，可能已經被使用或過期。" };
+  }
   if (invite.owner_id === userId) {
     return { ok: false, status: 400, error: "不能接受自己發出的邀請。" };
   }
@@ -86,8 +92,8 @@ export async function acceptInvite(userId: string, token: string): Promise<Accep
   const { error: shareError } = await supabase.from("shares").upsert({
     owner_id: invite.owner_id,
     viewer_id: userId,
-    invite_token: token,
-    name: invite.name || viewerProfile?.name || "",
+    invite_token: normalized,
+    name: standing ? viewerProfile?.name || "" : invite.name || viewerProfile?.name || "",
     viewer_line_user_id: viewerProfile?.line_user_id ?? "",
     avatar_url: viewerProfile?.avatar_url ?? null,
     scope: invite.scope,
@@ -97,10 +103,12 @@ export async function acceptInvite(userId: string, token: string): Promise<Accep
     return { ok: false, status: 500, error: "接受邀請失敗，請稍後再試。" };
   }
 
-  await supabase
-    .from("share_invites")
-    .update({ status: "accepted", accepted_at: new Date().toISOString() })
-    .eq("token", token);
+  if (!standing) {
+    await supabase
+      .from("share_invites")
+      .update({ status: "accepted", accepted_at: new Date().toISOString() })
+      .eq("token", normalized);
+  }
 
   const { data: ownerProfile } = await supabase
     .from("profiles")
@@ -109,6 +117,79 @@ export async function acceptInvite(userId: string, token: string): Promise<Accep
     .maybeSingle();
 
   return { ok: true, ownerName: ownerProfile?.name || invite.name || "對方" };
+}
+
+/** 每人一組可重複使用的分享 ID，給對方點連結或手動輸入。 */
+export async function ensureShareId(userId: string): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const { data: existing } = await supabase
+    .from("share_invites")
+    .select("token")
+    .eq("owner_id", userId)
+    .eq("name", STANDING_INVITE_NAME)
+    .maybeSingle();
+  if (existing?.token) return existing.token;
+
+  const token = createInviteCode();
+  const { error } = await supabase.from("share_invites").insert({
+    token,
+    owner_id: userId,
+    name: STANDING_INVITE_NAME,
+    scope: "full",
+    status: "pending",
+  });
+  if (error) {
+    console.error("[sharing] ensureShareId", error);
+    throw new Error("建立分享 ID 失敗。");
+  }
+  return token;
+}
+
+type AddViewerResult =
+  | { ok: true; viewerName: string }
+  | { ok: false; status: number; error: string };
+
+/** 用對方的分享 ID 把對方加進「誰可以看我的紀錄」。 */
+export async function addViewerByShareId(
+  ownerId: string,
+  theirShareId: string,
+  label = "",
+): Promise<AddViewerResult> {
+  const supabase = getSupabaseAdmin();
+  const { data: invite } = await supabase
+    .from("share_invites")
+    .select("owner_id")
+    .eq("token", theirShareId.trim().toUpperCase())
+    .maybeSingle();
+
+  if (!invite) {
+    return { ok: false, status: 404, error: "找不到這個 ID，請請對方在設定頁把 ID 複製給你。" };
+  }
+  if (invite.owner_id === ownerId) {
+    return { ok: false, status: 400, error: "不能新增自己的 ID。" };
+  }
+
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("name, line_user_id, avatar_url")
+    .eq("id", invite.owner_id)
+    .maybeSingle();
+
+  const { error } = await supabase.from("shares").upsert({
+    owner_id: ownerId,
+    viewer_id: invite.owner_id,
+    invite_token: theirShareId.trim().toUpperCase(),
+    name: label.trim() || viewerProfile?.name || "",
+    viewer_line_user_id: viewerProfile?.line_user_id ?? "",
+    avatar_url: viewerProfile?.avatar_url ?? null,
+    scope: "full",
+  });
+  if (error) {
+    console.error("[sharing] addViewerByShareId", error);
+    return { ok: false, status: 500, error: "新增失敗，請稍後再試。" };
+  }
+
+  return { ok: true, viewerName: label.trim() || viewerProfile?.name || "對方" };
 }
 
 interface DayEntryRow {

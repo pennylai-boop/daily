@@ -207,27 +207,47 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav
           aria-label="主要分頁"
-          className="fixed inset-x-0 bottom-0 z-40 w-full min-w-0 max-w-[100dvw] border-t border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)] shadow-[0_-2px_10px_rgba(17,24,39,0.08)] lg:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 w-full min-w-0 max-w-[100dvw] overflow-visible border-t border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)] shadow-[0_-2px_10px_rgba(17,24,39,0.08)] lg:hidden"
         >
-          {/* 列高 66px，對齊同系列 App 底部導覽。 */}
+          {/* 列高 66px，對齊同系列 App 底部導覽。專心是往上微凸的圓鈕。 */}
           <ul className="flex h-[66px] w-full min-w-0">
             {TAB_ITEMS.map((item) => {
               const active = isActive(item.href);
+              const raised = item.href === "/focus";
               return (
-                <li key={item.href} className="min-w-0 flex-1">
+                <li key={item.href} className="relative min-w-0 flex-1">
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex h-full w-full min-w-0 flex-col items-center justify-center gap-1 px-0.5 transition-colors",
-                      active ? "bg-brand text-on-brand" : "text-ink-muted",
+                      "flex min-w-0 flex-col items-center justify-center transition-colors",
+                      raised
+                        ? cn(
+                            "absolute top-0 left-1/2 z-10 size-14 -translate-x-1/2 -translate-y-[1.15rem] rounded-full bg-brand text-on-brand shadow-[0_6px_16px_rgba(17,24,39,0.18)] ring-4 ring-paper",
+                            active && "ring-brand/25",
+                          )
+                        : cn(
+                            "h-full w-full gap-1 px-0.5",
+                            active ? "bg-brand text-on-brand" : "text-ink-muted",
+                          ),
                     )}
                   >
-                    <item.Icon className="size-6 shrink-0" strokeWidth={active ? 2.2 : 1.8} />
-                    <span className="w-full truncate text-center text-[11px] leading-none font-medium">
+                    <item.Icon
+                      className={cn("shrink-0", raised ? "size-7" : "size-6")}
+                      strokeWidth={active || raised ? 2.2 : 1.8}
+                    />
+                    {raised ? <span className="sr-only">{item.shortLabel}</span> : null}
+                    {raised ? null : (
+                      <span className="w-full truncate text-center text-[11px] leading-none font-medium">
+                        {item.shortLabel}
+                      </span>
+                    )}
+                  </Link>
+                  {raised ? (
+                    <span className="pointer-events-none absolute inset-x-0 bottom-1.5 truncate text-center text-[11px] leading-none font-medium text-ink-muted">
                       {item.shortLabel}
                     </span>
-                  </Link>
+                  ) : null}
                 </li>
               );
             })}

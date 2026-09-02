@@ -14,18 +14,26 @@ export function focusElapsedSeconds(focus: FocusState, now = Date.now()): number
   return Math.max(0, Math.floor((now - started) / 1000));
 }
 
+export function isOpenFocus(focus: FocusState): boolean {
+  return focus.runningKind === "open";
+}
+
 export function focusRemainingSeconds(focus: FocusState, now = Date.now()): number {
+  if (isOpenFocus(focus)) return 0;
   if (!focus.runningStartedAt) return focus.runningPlannedMinutes * 60;
   const cap = focus.runningPlannedMinutes * 60;
   return Math.max(0, cap - focusElapsedSeconds(focus, now));
 }
 
 export function isFocusRunning(focus: FocusState, now = Date.now()): boolean {
-  return Boolean(focus.runningStartedAt) && focusRemainingSeconds(focus, now) > 0;
+  if (!focus.runningStartedAt) return false;
+  if (isOpenFocus(focus)) return true;
+  return focusRemainingSeconds(focus, now) > 0;
 }
 
 export function focusShouldComplete(focus: FocusState, now = Date.now()): boolean {
-  return Boolean(focus.runningStartedAt) && focusRemainingSeconds(focus, now) <= 0;
+  if (!focus.runningStartedAt || isOpenFocus(focus)) return false;
+  return focusRemainingSeconds(focus, now) <= 0;
 }
 
 export function todayFocusSeconds(sessions: FocusSession[], date = todayIso()): number {

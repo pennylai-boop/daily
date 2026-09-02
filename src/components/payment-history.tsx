@@ -92,17 +92,26 @@ export function PaymentHistory() {
       <SectionHeading
         title="付款紀錄"
         description="包含贊助、卜卦點數與無廣告訂閱。登入後下的單會綁在帳號上；舊的贊助若信箱相同也會列出來。"
+        action={
+          loggedIn ? undefined : (
+            <Button
+              type="button"
+              size="sm"
+              className="shrink-0"
+              variant="secondary"
+              disabled={!ready || loginBusy}
+              onClick={() => void login()}
+            >
+              {loginBusy ? "前往登入…" : "用 LINE 登入"}
+            </Button>
+          )
+        }
       />
 
       {!ready ? (
         <p className="mt-4 text-[13px] text-ink-muted">讀取中…</p>
       ) : !loggedIn ? (
-        <div className="mt-4 space-y-3">
-          <p className="text-[13px] text-ink-muted">用 LINE 登入後可查看你的付款紀錄。</p>
-          <Button variant="secondary" disabled={loginBusy} onClick={() => void login()}>
-            {loginBusy ? "前往登入…" : "用 LINE 登入"}
-          </Button>
-        </div>
+        <p className="mt-4 text-[13px] text-ink-muted">用 LINE 登入後可查看你的付款紀錄。</p>
       ) : error ? (
         <p className="mt-4 text-[13px] font-semibold text-alert">{error}</p>
       ) : orders === null ? (

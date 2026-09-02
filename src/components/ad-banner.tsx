@@ -24,7 +24,7 @@ export function AdBanner() {
           <p className="text-[11px] tracking-wide text-ink-subtle">廣告</p>
           <Link
             href="/adfree"
-            className="text-[11px] font-medium text-accent underline-offset-2 hover:underline"
+            className="adfree-link text-[11px] font-medium underline-offset-2 hover:underline"
           >
             訂閱無廣告 NT$50／月
           </Link>

@@ -72,32 +72,9 @@ export function RoutinesScreen() {
       <header className="flex items-center gap-2">
         <h1 className="text-2xl font-semibold tracking-tight text-ink">定期目標</h1>
         <InfoHint label="定期目標是什麼">
-          上面寫本週／本月想完成的事，打勾就劃掉。下面放會重複出現的目標，天天會在該做的日子排進當天清單；想書寫的再選一種記錄格式。
+          上面寫本月／本週想完成的事，打勾就劃掉。下面放會重複出現的目標，天天會在該做的日子排進當天清單；想書寫的再選一種記錄格式。
         </InfoHint>
       </header>
-
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="週目標"
-          description="條列該週想完成的事，勾選後會劃掉。可用右上角切換不同週。"
-          action={
-            <PeriodNav
-              label={formatWeekRangeLabel(weekCursor)}
-              prevLabel="上一週"
-              nextLabel="下一週"
-              onPrev={() => setWeekCursor(addDays(weekCursor, -7))}
-              onNext={() => setWeekCursor(addDays(weekCursor, 7))}
-            />
-          }
-        />
-        <div className="mt-3">
-          <FocusList
-            items={weekItems}
-            placeholder="新增一個這週想完成的目標"
-            onChange={(next) => setWeekGoals(weekCursor, next)}
-          />
-        </div>
-      </Card>
 
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading
@@ -118,6 +95,29 @@ export function RoutinesScreen() {
             items={monthItems}
             placeholder="新增一個這月想完成的目標"
             onChange={(next) => setMonthGoals(month, next)}
+          />
+        </div>
+      </Card>
+
+      <Card className="px-4 py-4 sm:px-5">
+        <SectionHeading
+          title="週目標"
+          description="條列該週想完成的事，勾選後會劃掉。可用右上角切換不同週。"
+          action={
+            <PeriodNav
+              label={formatWeekRangeLabel(weekCursor)}
+              prevLabel="上一週"
+              nextLabel="下一週"
+              onPrev={() => setWeekCursor(addDays(weekCursor, -7))}
+              onNext={() => setWeekCursor(addDays(weekCursor, 7))}
+            />
+          }
+        />
+        <div className="mt-3">
+          <FocusList
+            items={weekItems}
+            placeholder="新增一個這週想完成的目標"
+            onChange={(next) => setWeekGoals(weekCursor, next)}
           />
         </div>
       </Card>
@@ -238,10 +238,10 @@ export function RoutinesScreen() {
                   size="sm"
                   variant="ghost"
                   aria-label={`刪除 ${routine.title}`}
-                  className="size-8 px-0 text-alert"
+                  className="size-10 px-0 text-alert"
                   onClick={() => deleteRoutine(routine.id)}
                 >
-                  <TrashIcon className="size-4" />
+                  <TrashIcon className="size-6" strokeWidth={2} />
                 </Button>
               </li>
             ))}
@@ -271,10 +271,10 @@ function PeriodNav({
         size="sm"
         variant="ghost"
         aria-label={prevLabel}
-        className="size-8 shrink-0 border border-line-strong p-0"
+        className="size-10 shrink-0 p-0"
         onClick={onPrev}
       >
-        <ChevronLeftIcon className="size-6" strokeWidth={2.2} />
+        <ChevronLeftIcon className="size-8" strokeWidth={2.2} />
       </Button>
       <span className="min-w-0 max-w-[11rem] truncate px-1 text-center text-[13px] text-ink-muted sm:max-w-none">
         {label}
@@ -283,10 +283,10 @@ function PeriodNav({
         size="sm"
         variant="ghost"
         aria-label={nextLabel}
-        className="size-8 shrink-0 border border-line-strong p-0"
+        className="size-10 shrink-0 p-0"
         onClick={onNext}
       >
-        <ChevronRightIcon className="size-6" strokeWidth={2.2} />
+        <ChevronRightIcon className="size-8" strokeWidth={2.2} />
       </Button>
     </div>
   );
@@ -331,7 +331,7 @@ function RoutineRow({
         size="sm"
         variant="ghost"
         aria-label={`編輯「${routine.title}」的設定`}
-        className="size-8 shrink-0 border border-line-strong px-0"
+        className="size-10 shrink-0 px-0"
         onClick={onEdit}
       >
         <PencilIcon className="size-6" strokeWidth={2} />
@@ -343,7 +343,7 @@ function RoutineRow({
         size="sm"
         variant="ghost"
         aria-label={`刪除「${routine.title}」`}
-        className="size-8 shrink-0 border border-line-strong px-0 text-alert"
+        className="size-10 shrink-0 px-0 text-alert"
         onClick={onDelete}
       >
         <TrashIcon className="size-6" strokeWidth={2} />

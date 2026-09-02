@@ -191,10 +191,10 @@ export interface ShareRecipient {
 }
 
 /**
- * 常用的分享對象（LINE 群組或個人）。
+ * 常用的 LINE 群組或好友。
  *
- * 只存名字：網頁沒有辦法指定訊息要進哪個群組，最後一步一定是 LINE 自己的選擇畫面，
- * 所以這裡記的是「我上次傳給誰」，用來在送出前確認並提示要在 LINE 選哪一個。
+ * 新增時用 LIFF shareTargetPicker 打開 LINE 的好友／群組列表。
+ * LINE 不會回傳選到誰，所以本機只記顯示名稱，傳送時再開一次選擇畫面。
  */
 export interface LineShareTarget {
   id: string;
@@ -312,10 +312,14 @@ export interface FocusSession {
   completed: boolean;
 }
 
+/** timed：番茄鐘倒數；open：碼表直接往上加。 */
+export type FocusRunKind = "timed" | "open";
+
 export interface FocusState {
   pomodoroMinutes: number;
   runningStartedAt: string | null;
   runningPlannedMinutes: number;
+  runningKind: FocusRunKind;
   sessions: FocusSession[];
 }
 
@@ -323,6 +327,7 @@ export const DEFAULT_FOCUS: FocusState = {
   pomodoroMinutes: 25,
   runningStartedAt: null,
   runningPlannedMinutes: 25,
+  runningKind: "timed",
   sessions: [],
 };
 
@@ -346,4 +351,5 @@ export interface DailyState {
   sharedPepTalks: SharedPepTalk[];
 }
 
-export type ThemePreference = "light" | "dark" | "system";
+/** 橘色＝現況淺色；藍色＝主色改 #262f8b；深色＝原本的深色模式。 */
+export type ThemePreference = "orange" | "blue" | "dark";

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/segmented";
 import { Card, SectionHeading } from "@/components/ui/surfaces";
 import { ADFREE_AMOUNT, formatAdFreeUntil, isAdFreeActive } from "@/lib/adfree";
@@ -46,7 +47,20 @@ export function AdFreeCard({
         <SectionHeading
           title="無廣告訂閱"
           description={`最下排廣告每月 ${formatAmount(ADFREE_AMOUNT)}，信用卡自動續約。打開開關會直接到付款頁。`}
-          action={<Switch checked={active} onChange={toggle} label="無廣告訂閱" />}
+          action={
+            active ? (
+              <Switch checked={active} onChange={toggle} label="無廣告訂閱" />
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                className="shrink-0"
+                onClick={() => router.push("/adfree")}
+              >
+                訂閱無廣告 {formatAmount(ADFREE_AMOUNT)}
+              </Button>
+            )
+          }
         />
 
         {ready && active && until ? (

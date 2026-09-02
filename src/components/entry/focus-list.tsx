@@ -108,31 +108,31 @@ export function FocusList({
                 size="sm"
                 variant="ghost"
                 aria-label={`刪除目標：${item.text}`}
-                className="size-7 px-0"
+                className="size-9 px-0"
                 onClick={() => onChange(items.filter((current) => current.id !== item.id))}
               >
-                <TrashIcon className="size-3.5" />
+                <TrashIcon className="size-5" strokeWidth={2} />
               </Button>
               {editing ? (
                 <Button
                   size="sm"
                   variant="ghost"
                   aria-label={`完成修改：${item.text}`}
-                  className="size-7 px-0"
+                  className="size-9 px-0"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => commitEdit(item)}
                 >
-                  <CheckIcon className="size-3.5" />
+                  <CheckIcon className="size-5" strokeWidth={2} />
                 </Button>
               ) : (
                 <Button
                   size="sm"
                   variant="ghost"
                   aria-label={`修改目標：${item.text}`}
-                  className="size-7 px-0"
+                  className="size-9 px-0"
                   onClick={() => startEdit(item)}
                 >
-                  <PencilIcon className="size-3.5" />
+                  <PencilIcon className="size-5" strokeWidth={2} />
                 </Button>
               )}
             </li>

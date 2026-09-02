@@ -23,8 +23,11 @@ export interface LiffLike {
     pictureUrl?: string;
   }>;
   isApiAvailable: (name: string) => boolean;
-  /** 使用者按取消時回傳 null。 */
-  shareTargetPicker: (messages: unknown[]) => Promise<{ status: string } | null>;
+  /** 使用者按取消時回傳 null。isMultiple 可一次選多個聊天室。 */
+  shareTargetPicker: (
+    messages: unknown[],
+    options?: { isMultiple?: boolean },
+  ) => Promise<{ status: string } | null>;
 }
 
 declare global {

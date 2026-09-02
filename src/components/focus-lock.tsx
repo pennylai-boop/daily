@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { focusRemainingSeconds, isFocusRunning } from "@/lib/focus";
+import {
+  focusElapsedSeconds,
+  focusRemainingSeconds,
+  isFocusRunning,
+  isOpenFocus,
+} from "@/lib/focus";
 import { nativeLockApps, nativeUnlockApps } from "@/lib/native-bridge";
 import { formatDuration } from "@/lib/templates";
 import { finishFocusSession, settleExpiredFocus, useDailyStore } from "@/lib/store";
@@ -19,10 +24,13 @@ export function FocusLock() {
     pomodoroMinutes: 25,
     runningStartedAt: null,
     runningPlannedMinutes: 25,
+    runningKind: "timed" as const,
     sessions: [],
   };
   const running = ready && isFocusRunning(focus);
   const remaining = ready ? focusRemainingSeconds(focus) : 0;
+  const elapsed = ready ? focusElapsedSeconds(focus) : 0;
+  const open = isOpenFocus(focus);
   const wakeLock = useRef<WakeLockSentinel | null>(null);
   const focusRef = useRef(focus);
   focusRef.current = focus;
@@ -34,7 +42,7 @@ export function FocusLock() {
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
-      if (focusRemainingSeconds(focusRef.current) <= 0) {
+      if (!isOpenFocus(focusRef.current) && focusRemainingSeconds(focusRef.current) <= 0) {
         finishFocusSession(true);
         void notifyDone();
         void releaseLock(wakeLock);
@@ -71,7 +79,7 @@ export function FocusLock() {
 
   const planned = focus.runningPlannedMinutes;
   const cap = planned * 60;
-  const progress = cap > 0 ? 1 - remaining / cap : 0;
+  const progress = open ? (elapsed % 60) / 60 : cap > 0 ? 1 - remaining / cap : 0;
 
   return (
     <div
@@ -81,7 +89,9 @@ export function FocusLock() {
       aria-label="專心模式進行中"
     >
       <p className="text-center text-[13px] tracking-wide text-ink-subtle">專心模式</p>
-      <p className="mt-2 text-center text-sm text-ink-muted">{planned} 分鐘番茄鐘</p>
+      <p className="mt-2 text-center text-sm text-ink-muted">
+        {open ? "碼表計時" : `${planned} 分鐘番茄鐘`}
+      </p>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
         <div className="relative flex size-56 items-center justify-center">
@@ -99,7 +109,7 @@ export function FocusLock() {
             />
           </svg>
           <p className="text-5xl font-semibold tabular-nums tracking-tight text-ink">
-            {formatDuration(remaining)}
+            {formatDuration(open ? elapsed : remaining)}
           </p>
         </div>
         <p className="max-w-xs text-center text-[13px] leading-relaxed text-ink-muted">

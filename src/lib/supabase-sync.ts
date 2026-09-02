@@ -10,6 +10,7 @@
  * 下一次登入才會看到另一台裝置的變更。
  */
 
+import { STANDING_INVITE_NAME } from "./storage";
 import { getSupabaseBrowser } from "./supabase-browser";
 import type {
   CustomMood,
@@ -466,7 +467,12 @@ export async function fetchRecipients(userId: string): Promise<ShareRecipient[]>
   if (!supabase) return [];
 
   const [invitesRes, sharesRes] = await Promise.all([
-    supabase.from("share_invites").select("*").eq("owner_id", userId).eq("status", "pending"),
+    supabase
+      .from("share_invites")
+      .select("*")
+      .eq("owner_id", userId)
+      .eq("status", "pending")
+      .neq("name", STANDING_INVITE_NAME),
     supabase.from("shares").select("*").eq("owner_id", userId),
   ]);
 

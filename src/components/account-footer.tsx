@@ -35,13 +35,12 @@ export function AccountFooter({
   if (!loggedIn) {
     return (
       <div className={cn("border-t border-line pt-4", className)}>
-        <p className="text-[13px] text-ink-muted">尚未登入</p>
         <LinkButton
           href="/settings"
           variant="secondary"
           size="sm"
           onClick={onNavigate}
-          className="mt-2 no-underline"
+          className="no-underline"
         >
           用 LINE 登入
         </LinkButton>

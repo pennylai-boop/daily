@@ -1,7 +1,7 @@
 "use client";
 
-import { formatFullDate } from "./date";
-import { findMood, type MoodOption } from "./moods";
+import { formatCardDate, formatFullDate } from "./date";
+import { DEFAULT_MOOD, findMood, type MoodOption } from "./moods";
 import { blobToDataUrl, hasNativeShare, nativeShare } from "./native-bridge";
 import { getMark, getTemplate, groupMindfulnessItems, isBlockEmpty, summarizeBlock } from "./templates";
 import type { CustomMood, DayEntry, EntryPhoto, Routine } from "./types";
@@ -16,17 +16,18 @@ const WIDTH = 1080;
 const PADDING = 76;
 const CONTENT_WIDTH = WIDTH - PADDING * 2;
 
-/** 與 globals.css 的色票同步（設計系統：灰底、白卡、橘主色、藍次色）。 */
+/** 分享圖走手帳風格：米格紙、黑字、淺綠心情標。 */
 const COLORS = {
-  paper: "#f3f4f6",
-  card: "#ffffff",
-  ink: "#111827",
+  paper: "#f6f3ea",
+  card: "#f6f3ea",
+  ink: "#1a1a1a",
   inkMuted: "#4b5563",
-  inkSubtle: "#9ca3af",
-  brand: "#e86e2c",
-  brandTint: "#fde8dd",
-  accent: "#262f8b",
-  line: "#e5e7eb",
+  inkSubtle: "#8a8478",
+  brand: "#1a1a1a",
+  brandTint: "#d7ebc8",
+  accent: "#2f6b3a",
+  line: "#d9d3c4",
+  grid: "rgba(26, 26, 26, 0.06)",
 };
 
 const FONT_STACK =
@@ -60,7 +61,7 @@ class PageBuilder {
     this.y += 1;
   }
 
-  /** 區塊標題：小色塊 + 標題文字。 */
+  /** 區塊標題：黑字粗體，左邊可帶一個小符號。 */
   sectionTitle(emoji: string, text: string) {
     const y = this.y;
     this.commands.push((ctx) => {
@@ -68,8 +69,8 @@ class PageBuilder {
       ctx.fillStyle = COLORS.ink;
       ctx.textBaseline = "alphabetic";
       ctx.fillText(emoji, PADDING, y + 30);
-      ctx.font = this.font(30, 600);
-      ctx.fillStyle = COLORS.brand;
+      ctx.font = this.font(30, 700);
+      ctx.fillStyle = COLORS.ink;
       ctx.fillText(text, PADDING + 44, y + 30);
     });
     this.y += 46;
@@ -174,25 +175,17 @@ class PageBuilder {
     const y = this.y;
     const size = 28;
     this.measure.font = this.font(size);
-    const lines = wrapText(this.measure, text, CONTENT_WIDTH - 52);
+    const lines = wrapText(this.measure, text, CONTENT_WIDTH - 48);
 
     this.commands.push((ctx) => {
-      ctx.beginPath();
-      ctx.arc(PADDING + 17, y + size * 0.6, 17, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.brandTint;
-      ctx.fill();
-      ctx.font = this.font(20, 600);
-      ctx.fillStyle = COLORS.brand;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`${index}`, PADDING + 17, y + size * 0.62);
-      ctx.textAlign = "left";
-
-      ctx.font = this.font(size);
+      ctx.font = this.font(size, 600);
       ctx.fillStyle = COLORS.ink;
       ctx.textBaseline = "alphabetic";
+      ctx.fillText(`${index}.`, PADDING, y + size);
+
+      ctx.font = this.font(size);
       lines.forEach((line, lineIndex) => {
-        ctx.fillText(line, PADDING + 52, y + size + lineIndex * Math.round(size * 1.7));
+        ctx.fillText(line, PADDING + 48, y + size + lineIndex * Math.round(size * 1.7));
       });
     });
 
@@ -201,36 +194,51 @@ class PageBuilder {
 
   header(entry: DayEntry, mood: MoodOption | null, moodIcon: HTMLImageElement | null) {
     const y = this.y;
+    const { weekday, monthDay } = formatCardDate(entry.date);
 
     this.commands.push((ctx) => {
-      ctx.fillStyle = COLORS.brand;
-      ctx.fillRect(PADDING, y, 84, 6);
+      ctx.fillStyle = COLORS.ink;
+      ctx.textBaseline = "alphabetic";
+      ctx.font = this.font(26, 500);
+      ctx.fillText(weekday, PADDING, y + 26);
+      ctx.fillRect(PADDING, y + 34, ctx.measureText(weekday).width, 2);
+      ctx.font = this.font(38, 600);
+      ctx.fillText(monthDay, PADDING, y + 82);
+      drawSun(ctx, WIDTH - PADDING - 18, y + 28, 17);
     });
-    this.y += 40;
-
-    this.paragraph(formatFullDate(entry.date), { size: 42, weight: 600, lineHeight: 58 });
+    this.y += 120;
 
     if (mood) {
       const moodY = this.y;
+      this.measure.font = this.font(32, 600);
+      const labelWidth = this.measure.measureText(mood.label).width;
       this.commands.push((ctx) => {
+        ctx.textAlign = "center";
         ctx.textBaseline = "alphabetic";
         if (moodIcon) {
-          // 自訂心情上傳的小圖，裁成圓形和介面上的樣子一致。
           ctx.save();
           ctx.beginPath();
-          ctx.arc(PADDING + 20, moodY + 20, 20, 0, Math.PI * 2);
+          ctx.arc(WIDTH / 2, moodY + 48, 48, 0, Math.PI * 2);
           ctx.clip();
-          ctx.drawImage(moodIcon, PADDING, moodY, 40, 40);
+          ctx.drawImage(moodIcon, WIDTH / 2 - 48, moodY, 96, 96);
           ctx.restore();
         } else {
-          ctx.font = this.font(38);
-          ctx.fillText(mood.emoji ?? "", PADDING, moodY + 38);
+          ctx.font = this.font(88);
+          ctx.fillText(mood.emoji ?? "", WIDTH / 2, moodY + 78);
         }
-        ctx.font = this.font(28, 500);
-        ctx.fillStyle = COLORS.inkMuted;
-        ctx.fillText(`今天的心情：${mood.label}`, PADDING + 56, moodY + 34);
+
+        const pillW = labelWidth + 48;
+        const pillX = WIDTH / 2 - pillW / 2;
+        const pillY = moodY + 104;
+        ctx.fillStyle = COLORS.brandTint;
+        roundRect(ctx, pillX, pillY, pillW, 48, 10);
+        ctx.fill();
+        ctx.font = this.font(32, 600);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fillText(mood.label, WIDTH / 2, pillY + 34);
+        ctx.textAlign = "left";
       });
-      this.y += 58;
+      this.y += 168;
     }
   }
 
@@ -242,12 +250,12 @@ class PageBuilder {
     if (items.length === 1) {
       const { photo, image } = items[0];
       const ratio = photo.height / photo.width || 1;
-      const height = Math.min(Math.round(CONTENT_WIDTH * ratio), 900);
+      const height = Math.min(Math.round((CONTENT_WIDTH - 160) * ratio), 720);
       const y = this.y;
       this.commands.push((ctx) => {
-        drawCover(ctx, image, PADDING, y, CONTENT_WIDTH, height, 20);
+        drawPolaroid(ctx, image, PADDING + 80, y, CONTENT_WIDTH - 160, height);
       });
-      this.y += height;
+      this.y += height + 48;
       return;
     }
 
@@ -255,43 +263,49 @@ class PageBuilder {
     const rows = Math.ceil(items.length / 2);
     const baseY = this.y;
 
+    const rowHeight = cell + 36;
     items.forEach(({ image }, index) => {
       const x = PADDING + (index % 2) * (cell + gap);
-      const y = baseY + Math.floor(index / 2) * (cell + gap);
+      const y = baseY + Math.floor(index / 2) * (rowHeight + gap);
       this.commands.push((ctx) => {
-        drawCover(ctx, image, x, y, cell, cell, 20);
+        drawPolaroid(ctx, image, x, y, cell, cell);
       });
     });
 
-    this.y += rows * cell + (rows - 1) * gap;
+    this.y += rows * rowHeight + (rows - 1) * gap;
   }
 
   footer() {
     const y = this.y;
     this.commands.push((ctx) => {
-      ctx.fillStyle = COLORS.line;
-      ctx.fillRect(PADDING, y, CONTENT_WIDTH, 1);
-
-      ctx.font = this.font(24, 600);
-      ctx.fillStyle = COLORS.brand;
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText("天天 daily", PADDING, y + 46);
-
-      ctx.font = this.font(22);
+      ctx.font = this.font(22, 500);
       ctx.fillStyle = COLORS.inkSubtle;
-      ctx.textAlign = "right";
-      ctx.fillText("daily.introvista.ai", WIDTH - PADDING, y + 46);
+      ctx.textBaseline = "alphabetic";
+      ctx.textAlign = "center";
+      ctx.fillText("天天 daily", WIDTH / 2, y + 36);
       ctx.textAlign = "left";
     });
-    this.y += 60;
+    this.y += 52;
   }
 
   paint(ctx: CanvasRenderingContext2D, height: number) {
     ctx.fillStyle = COLORS.paper;
     ctx.fillRect(0, 0, WIDTH, height);
-    ctx.fillStyle = COLORS.card;
-    roundRect(ctx, 28, 28, WIDTH - 56, height - 56, 32);
-    ctx.fill();
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 1;
+    const step = 32;
+    for (let x = 0; x <= WIDTH; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= height; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(WIDTH, y + 0.5);
+      ctx.stroke();
+    }
     for (const command of this.commands) {
       ctx.save();
       command(ctx);
@@ -329,6 +343,44 @@ function drawCover(
   ctx.lineWidth = 1;
   roundRect(ctx, x + 0.5, y + 0.5, width - 1, height - 1, radius);
   ctx.stroke();
+}
+
+function drawPolaroid(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const frame = 14;
+  const bottom = 36;
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "rgba(26, 26, 26, 0.12)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 4;
+  roundRect(ctx, x, y, width, height + bottom, 6);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  drawCover(ctx, image, x + frame, y + frame, width - frame * 2, height - frame, 2);
+}
+
+function drawSun(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
+  ctx.save();
+  ctx.strokeStyle = COLORS.ink;
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.46, 0, Math.PI * 2);
+  ctx.stroke();
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (Math.PI / 4) * i - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * radius * 0.68, cy + Math.sin(angle) * radius * 0.68);
+    ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -415,7 +467,7 @@ export async function buildDayImage(
   const measureContext = measureCanvas.getContext("2d");
   if (!measureContext) throw new Error("這個瀏覽器不支援 Canvas");
 
-  const mood = findMood(entry.mood, customMoods);
+  const mood = findMood(entry.mood, customMoods) ?? DEFAULT_MOOD;
   // Canvas 只能畫已經載入完成的圖，所以排版前先把心情圖示與照片都解碼好。
   const [moodIcon, photos] = await Promise.all([
     mood?.image ? loadImage(mood.image) : Promise.resolve(null),
@@ -518,6 +570,11 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 
 export type ShareResult = "native" | "shared" | "downloaded";
 
+export type ShareOutcome = {
+  result: ShareResult;
+  previewUrl: string;
+};
+
 /**
  * 三條路徑，依序嘗試：
  * 1. 原生殼的分享橋接（WebView 沒有 Web Share API，也存不下 blob 連結的下載）
@@ -529,8 +586,10 @@ export async function shareDayImage(
   routines: Routine[],
   checkedIds: string[],
   customMoods: CustomMood[] = [],
-): Promise<ShareResult> {
-  const blob = await toBlob(await buildDayImage(entry, routines, checkedIds, customMoods));
+): Promise<ShareOutcome> {
+  const canvas = await buildDayImage(entry, routines, checkedIds, customMoods);
+  const blob = await toBlob(canvas);
+  const previewUrl = canvas.toDataURL("image/jpeg", 0.72);
   const fileName = `daily-${entry.date}.png`;
   const title = `天天 daily｜${formatFullDate(entry.date)}`;
 
@@ -541,13 +600,13 @@ export async function shareDayImage(
       title,
       dataUrl: await blobToDataUrl(blob),
     });
-    if (handled) return "native";
+    if (handled) return { result: "native", previewUrl };
   }
 
   const file = new File([blob], fileName, { type: "image/png" });
   if (navigator.canShare?.({ files: [file] })) {
     await navigator.share({ files: [file], title });
-    return "shared";
+    return { result: "shared", previewUrl };
   }
 
   const url = URL.createObjectURL(blob);
@@ -556,5 +615,5 @@ export async function shareDayImage(
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
-  return "downloaded";
+  return { result: "downloaded", previewUrl };
 }

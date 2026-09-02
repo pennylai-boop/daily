@@ -3,43 +3,43 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { LinkIcon, ShareIcon, TrashIcon } from "@/components/icons";
+import { ImageIcon, LinkIcon, ShareIcon, TrashIcon } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
-import { Field, TextInput } from "@/components/ui/field";
+import { TextInput } from "@/components/ui/field";
 import { Segmented, Switch } from "@/components/ui/segmented";
 import { Card, Chip, PageHeading, SectionHeading } from "@/components/ui/surfaces";
 import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account";
 import { AdFreeCard } from "@/components/adfree-card";
 import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
-import { copyInviteUrl, shareInvite } from "@/lib/line-invite";
+import { copyInviteUrl, pickLineChat, shareInvite } from "@/lib/line-invite";
+import { sessionAccessToken } from "@/lib/session-token";
+import { isShareId } from "@/lib/storage";
+import { shareDayImage } from "@/lib/share-image";
 import { signInWithLine } from "@/lib/line-auth";
 import { DEFAULT_PEP_TALKS } from "@/lib/pep-talk";
-import { recordedDates } from "@/lib/stats";
+import { hasContent } from "@/lib/stats";
 import {
   addSharedPepTalk,
   refreshRecipients,
   refreshSharedPepTalks,
   removeSharedPepTalk,
+  createDayEntry,
+  markLineTargetUsed,
   useDailyStore,
 } from "@/lib/store";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { normalizeState } from "@/lib/storage";
 import { setThemePreference, useThemePreference } from "@/lib/theme";
-import type { Profile, ShareRecipient, ShareScope, ThemePreference } from "@/lib/types";
+import type { Profile, ShareRecipient, ThemePreference } from "@/lib/types";
 
 const THEME_OPTIONS = [
-  { value: "light", label: "淺色" },
+  { value: "orange", label: "橘色" },
+  { value: "blue", label: "藍色" },
   { value: "dark", label: "深色" },
-  { value: "system", label: "跟隨系統" },
 ] as const satisfies readonly { value: ThemePreference; label: string }[];
-
-const SCOPE_OPTIONS = [
-  { value: "full", label: "完整內容" },
-  { value: "mood", label: "只看心情" },
-] as const satisfies readonly { value: ShareScope; label: string }[];
 
 export function SettingsScreen({
   paymentReady,
@@ -81,7 +81,7 @@ export function SettingsScreen({
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeading
         title="設定"
-        description="帳號、無廣告訂閱、分享對象、資料備份；打氣小語與法律條款在頁面最下方。"
+        description="帳號、無廣告訂閱、分享對象；打氣小語與法律條款在頁面最下方。"
         action={
           <Segmented
             options={THEME_OPTIONS}
@@ -95,10 +95,6 @@ export function SettingsScreen({
       {message ? <p className="text-[13px] text-accent">{message}</p> : null}
 
       <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="帳號"
-          description="只支援 LINE 登入。登入後會帶入名稱與頭貼，顯示名稱可以再改。"
-        />
         <AccountPanel
           profile={profile}
           onMessage={setMessage}
@@ -112,49 +108,40 @@ export function SettingsScreen({
       <ShareCard />
 
       <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="資料"
-          description={
-            ready
-              ? `目前有 ${recordedDates(state).length} 天的紀錄、${state.routines.length} 個定期目標。`
-              : "讀取中…"
-          }
-        />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={exportJson} disabled={!ready}>
-            匯出 JSON 備份
-          </Button>
-          <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={!ready}>
-            匯入備份
-          </Button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void importJson(file);
-              event.target.value = "";
-            }}
-          />
-        </div>
-      </Card>
-
-      <Card className="px-4 py-4 sm:px-5">
         <SectionHeading title="關於天天" />
-        <dl className="mt-3 space-y-2 text-[13px]">
-          {[
-            ["產品名稱", "天天 daily"],
-            ["網域", "daily.introvista.ai"],
-            ["使用地區", "台灣（繁體中文）"],
-          ].map(([label, value]) => (
-            <div key={label} className="flex gap-3">
-              <dt className="w-20 shrink-0 text-ink-subtle">{label}</dt>
-              <dd className="text-ink-muted">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <dl className="min-w-0 flex-1 space-y-2 text-[13px]">
+            {[
+              ["產品名稱", "天天 daily"],
+              ["網域", "daily.introvista.ai"],
+              ["使用地區", "台灣（繁體中文）"],
+            ].map(([label, value]) => (
+              <div key={label} className="flex gap-3">
+                <dt className="w-20 shrink-0 text-ink-subtle">{label}</dt>
+                <dd className="text-ink-muted">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="flex shrink-0 flex-col items-stretch gap-2">
+            <Button variant="secondary" onClick={exportJson} disabled={!ready}>
+              匯出 JSON 備份
+            </Button>
+            <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={!ready}>
+              匯入備份
+            </Button>
+          </div>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void importJson(file);
+            event.target.value = "";
+          }}
+        />
       </Card>
 
       <PepTalkSettingsCard />
@@ -171,7 +158,6 @@ function AccountPanel({
   profile: Profile;
   onMessage: (message: string) => void;
 }) {
-  const store = useDailyStore();
   const [busy, setBusy] = useState(false);
   const loggedIn = Boolean(profile.lineUserId);
 
@@ -196,45 +182,41 @@ function AccountPanel({
     onMessage(cleared ? "已登出。" : "已登出（本機狀態已清除）。");
   };
 
-  if (!loggedIn) {
-    return (
-      <div className="mt-4 space-y-3">
-        <p className="text-[13px] leading-relaxed text-ink-muted">
-          登入後右上角會顯示你的 LINE 頭貼，分享與被分享紀錄也才能對上同一個身分。
-        </p>
-        <Button type="button" className="w-full sm:w-auto" disabled={busy} onClick={() => void login()}>
-          {busy ? "前往 LINE…" : "用 LINE 登入"}
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="mt-4 space-y-4">
-      <div className="flex items-center gap-3">
-        <ProfileAvatar profile={profile} size={48} />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-ink">{profile.name || "LINE 使用者"}</p>
-          <p className="mt-0.5 truncate text-[13px] text-ink-muted">
-            LINE {maskLineUserId(profile.lineUserId)}
-          </p>
+    <>
+      <SectionHeading
+        title="帳號"
+        description="只支援 LINE 登入。登入後會帶入名稱與頭貼。"
+        action={
+          loggedIn ? undefined : (
+            <Button type="button" size="sm" className="shrink-0" disabled={busy} onClick={() => void login()}>
+              {busy ? "前往 LINE…" : "用 LINE 登入"}
+            </Button>
+          )
+        }
+      />
+      {loggedIn ? (
+        <div className="mt-4 flex items-center gap-3">
+          <ProfileAvatar profile={profile} size={48} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-ink">{profile.name || "LINE 使用者"}</p>
+            <p className="mt-0.5 truncate text-[13px] text-ink-muted">
+              LINE {maskLineUserId(profile.lineUserId)}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            disabled={busy}
+            onClick={() => void logout()}
+          >
+            {busy ? "登出中…" : "登出"}
+          </Button>
         </div>
-      </div>
-
-      <Field label="顯示名稱" htmlFor="profile-name" hint="會出現在分享邀請裡；可和 LINE 名稱不同。">
-        <TextInput
-          id="profile-name"
-          value={profile.name}
-          maxLength={20}
-          placeholder="例如：小葉"
-          onChange={(event) => store.updateProfile({ name: event.target.value })}
-        />
-      </Field>
-
-      <Button type="button" variant="secondary" disabled={busy} onClick={() => void logout()}>
-        {busy ? "登出中…" : "登出"}
-      </Button>
-    </div>
+      ) : null}
+    </>
   );
 }
 
@@ -416,47 +398,104 @@ function LegalLinks() {
 /**
  * 常傳的 LINE 群組／對象清單。
  *
- * 只記名字。網頁沒辦法指定訊息進哪個群組，最後一步一定是 LINE 自己的選擇畫面，
- * 這份清單的作用是在紀錄頁送出前讓使用者確認要傳給誰，並提示在 LINE 要選哪一個。
+ * 按新增會打開 LINE 的好友與群組列表。選完後本機只記顯示名稱，
+ * 因為 LINE 基於隱私不會把選到的聊天室身分回給網頁。
  */
 function ShareTargetsCard() {
   const store = useDailyStore();
   const { targets } = store.state.settings.line;
   const [name, setName] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [picking, setPicking] = useState(false);
 
-  const add = () => {
-    if (!name.trim()) return;
-    store.addLineTarget(name);
+  const addFromLine = async () => {
+    setPicking(true);
+    setNote(null);
+    const result = await pickLineChat();
+    setPicking(false);
+
+    if (result === "cancelled") return;
+    if (result === "unavailable") {
+      setNote("請在 LINE App 內開啟天天 daily，才能從好友與群組列表選取。");
+      return;
+    }
+
+    const used = new Set(targets.map((target) => target.name));
+    let next = name.trim().slice(0, 30);
+    if (!next) {
+      let index = 1;
+      while (used.has(`群組 ${index}`)) index += 1;
+      next = `群組 ${index}`;
+    } else if (used.has(next)) {
+      setNote("這個名稱已經有了，請換一個顯示名稱再選一次。");
+      return;
+    }
+    store.addLineTarget(next);
     setName("");
+    setNote(`已加入「${next}」。可再按新增繼續從 LINE 列表選。`);
+  };
+
+  const sendToday = async () => {
+    const today = todayIso();
+    const entry = store.state.entries[today] ?? createDayEntry(today);
+    const checkedIds = store.state.checks[today] ?? [];
+    if (!hasContent(entry) && checkedIds.length === 0) {
+      setNote("今天還沒有紀錄，寫完再到這裡傳送。");
+      return;
+    }
+
+    setSending(true);
+    setNote(null);
+    try {
+      const preferred = [...targets].sort((a, b) =>
+        (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""),
+      )[0];
+      const { result } = await shareDayImage(entry, store.state.routines, checkedIds, store.state.customMoods);
+      if (preferred) markLineTargetUsed(preferred.id);
+      if (result === "downloaded") {
+        setNote(
+          preferred
+            ? `已下載圖片，傳到 LINE 的「${preferred.name}」即可。`
+            : "已下載圖片，可以直接傳到 LINE。",
+        );
+      } else if (preferred) {
+        setNote(`分享面板開好了，選 LINE →「${preferred.name}」送出。`);
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        setNote("圖片產生失敗，請再試一次。");
+      }
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="常傳的 LINE 對象"
-        description="先把常傳的群組或對象記下來，之後在每日紀錄頁按送出時就能直接挑一個、確認後再開分享面板。"
+        description="按新增會打開 LINE 的好友與群組列表。選取後可填顯示名稱方便辨認；傳送今天會把手帳圖送到你選的聊天室。"
       />
 
       <div className="mt-4 flex flex-wrap items-end gap-2">
-        <div className="min-w-48 flex-1">
-          <Field label="名稱" htmlFor="line-target-name">
-            <TextInput
-              id="line-target-name"
-              value={name}
-              maxLength={30}
-              placeholder="例如：家人群"
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  add();
-                }
-              }}
-            />
-          </Field>
-        </div>
-        <Button variant="secondary" onClick={add} disabled={!name.trim()}>
-          新增
+        <TextInput
+          id="line-target-name"
+          value={name}
+          maxLength={30}
+          aria-label="顯示名稱"
+          placeholder="選填顯示名稱，例如：家人群"
+          className="min-w-48 flex-1"
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void addFromLine();
+            }
+          }}
+        />
+        <Button variant="secondary" disabled={picking} onClick={() => void addFromLine()}>
+          {picking ? "開啟 LINE…" : "新增"}
         </Button>
       </div>
 
@@ -479,11 +518,16 @@ function ShareTargetsCard() {
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="mt-4 text-[13px] text-ink-muted">
-          還沒有記錄任何對象。沒有也可以照常分享，只是每次都要自己在 LINE 裡找。
-        </p>
-      )}
+      ) : null}
+
+      {note ? <p className="mt-3 text-[13px] text-accent">{note}</p> : null}
+
+      <div className="mt-4 flex justify-end">
+        <Button type="button" disabled={sending} onClick={() => void sendToday()}>
+          <ImageIcon className="size-4" />
+          {sending ? "產生圖片中…" : "傳送今天"}
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -491,41 +535,123 @@ function ShareTargetsCard() {
 function ShareCard() {
   const store = useDailyStore();
   const { profile, recipients } = store.state.settings;
-  const [name, setName] = useState("");
-  const [scope, setScope] = useState<ShareScope>("full");
+  const [draft, setDraft] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [shareId, setShareId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"id" | "add" | "line" | null>(null);
 
-  // 分享名單可能因為對方剛接受而在雲端變了，進頁面時重新拉一次。
   useEffect(() => {
-    if (profile.lineUserId) void refreshRecipients();
+    if (!profile.lineUserId) return;
+    void refreshRecipients();
+    void (async () => {
+      const token = await sessionAccessToken();
+      if (!token) return;
+      const response = await fetch("/api/share/id", { headers: { Authorization: `Bearer ${token}` } });
+      const data = (await response.json()) as { id?: string };
+      if (data.id) setShareId(data.id);
+    })();
   }, [profile.lineUserId]);
 
-  const send = async (recipient: ShareRecipient) => {
+  const sendLink = async (code: string) => {
     try {
-      const channel = await shareInvite(profile.name, recipient.inviteCode);
+      const channel = await shareInvite(profile.name, code);
       setNote(
         {
-          line: "已在 LINE 送出邀請，等對方按下接受。",
-          share: "已開啟分享面板，選 LINE 傳給對方。",
-          clipboard: "邀請連結已複製，貼到 LINE 傳給對方即可。",
-          cancelled: "邀請已建立，隨時可以再分享一次或複製連結。",
+          line: "已把邀請連結送到 LINE，對方點開後就能在「被分享」看到你的紀錄。",
+          share: "已開啟分享面板，選 LINE 把連結傳給對方。",
+          clipboard: "邀請連結已複製，貼到 LINE 傳給朋友即可。",
+          cancelled: "已取消。可再按一次，或先複製右上角 ID。",
         }[channel],
       );
     } catch {
-      setNote("分享沒有成功，可以改用「複製連結」。");
+      await copyInviteUrl(code);
+      setNote("邀請連結已複製，貼到 LINE 傳給朋友即可。");
     }
+  };
+
+  const copyMyId = async () => {
+    if (!shareId) return;
+    setBusy("id");
+    await copyInviteUrl(shareId);
+    setBusy(null);
+    setNote("已複製邀請連結。傳給對方，對方在 LINE 點開就能看到你的紀錄。");
+  };
+
+  const addById = async () => {
+    const token = draft.trim().toUpperCase();
+    if (!profile.lineUserId) {
+      setNote("要先用 LINE 登入。");
+      return;
+    }
+    if (!isShareId(token)) {
+      setNote("請輸入對方 8 碼的分享 ID。");
+      return;
+    }
+    setBusy("add");
+    const access = await sessionAccessToken();
+    if (!access) {
+      setBusy(null);
+      setNote("要先用 LINE 登入。");
+      return;
+    }
+    const response = await fetch("/api/share/add-viewer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${access}` },
+      body: JSON.stringify({ token }),
+    });
+    const data = (await response.json()) as { error?: string; viewerName?: string };
+    setBusy(null);
+    if (!response.ok) {
+      setNote(data.error ?? "新增失敗。");
+      return;
+    }
+    setDraft("");
+    setNote(`已把「${data.viewerName ?? "對方"}」加進可以看你紀錄的名單。`);
+    void refreshRecipients();
+  };
+
+  const inviteOnLine = async () => {
+    if (!profile.lineUserId) {
+      setNote("要先用 LINE 登入。");
+      return;
+    }
+    setBusy("line");
+    const code = shareId ?? (await ensureLocalShareId());
+    setBusy(null);
+    if (!code) {
+      setNote("還不能產生邀請連結，請稍後再試。");
+      return;
+    }
+    void sendLink(code);
+  };
+
+  const ensureLocalShareId = async () => {
+    const access = await sessionAccessToken();
+    if (!access) return null;
+    const response = await fetch("/api/share/id", { headers: { Authorization: `Bearer ${access}` } });
+    const data = (await response.json()) as { id?: string };
+    if (data.id) setShareId(data.id);
+    return data.id ?? null;
   };
 
   return (
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="分享給誰看"
-        description={
-          <>
-            用 LINE 送出邀請，對方接受之後你的紀錄才會出現在他的「被分享紀錄」。
-            LINE 不提供查詢好友的 API，所以沒辦法輸入對方的 LINE ID 加人。在 LINE
-            裡開啟本站時會跳出 LINE 的好友選擇畫面，其他瀏覽器則會退回系統分享面板或複製連結。
-          </>
+        description="把右上角 ID 或邀請連結給對方，對方在 LINE 點開後，你的紀錄會出現在對方的「被分享」。也可以填對方的 ID 直接新增。"
+        action={
+          shareId ? (
+            <button
+              type="button"
+              onClick={() => void copyMyId()}
+              className="shrink-0 rounded-lg border border-line-strong bg-surface px-2.5 py-1 font-mono text-[13px] font-semibold tracking-wide text-ink hover:bg-surface-muted"
+              aria-label={`複製分享 ID ${shareId}`}
+            >
+              ID {shareId}
+            </button>
+          ) : profile.lineUserId ? (
+            <span className="text-[13px] text-ink-subtle">{busy === "id" ? "…" : "讀取 ID…"}</span>
+          ) : null
         }
       />
 
@@ -535,10 +661,9 @@ function ShareCard() {
             <li key={recipient.id}>
               <RecipientRow
                 recipient={recipient}
-                onScopeChange={(next) => store.updateRecipient(recipient.id, { scope: next })}
-                onShare={() => void send(recipient)}
+                onShare={() => void sendLink(recipient.inviteCode || shareId || "")}
                 onCopy={() => {
-                  void copyInviteUrl(recipient.inviteCode);
+                  void copyInviteUrl(recipient.inviteCode || shareId || "");
                   setNote("邀請連結已複製。");
                 }}
                 onRemove={() => store.removeRecipient(recipient.id)}
@@ -546,47 +671,35 @@ function ShareCard() {
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="mt-4 text-[13px] text-ink-muted">還沒有分享給任何人。</p>
-      )}
+      ) : null}
 
       <form
         className="mt-4 space-y-3 border-t border-line pt-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!profile.lineUserId) {
-            setNote("要先用 LINE 登入才能送出邀請。");
-            return;
-          }
-          void (async () => {
-            const recipient = await store.createInvite({ name: name.trim(), scope });
-            if (!recipient) {
-              setNote("邀請建立失敗，請稍後再試。");
-              return;
-            }
-            setName("");
-            setScope("full");
-            void send(recipient);
-          })();
+          void addById();
         }}
       >
         <TextInput
-          value={name}
+          value={draft}
           maxLength={20}
-          aria-label="對方的稱呼"
-          placeholder="對方的稱呼（選填，方便自己辨認）"
-          onChange={(event) => setName(event.target.value)}
+          aria-label="對方的分享 ID"
+          placeholder="對方的 ID（8 碼）"
+          className="font-mono uppercase"
+          onChange={(event) => setDraft(event.target.value)}
         />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Segmented
-            options={SCOPE_OPTIONS}
-            value={scope}
-            onChange={setScope}
-            ariaLabel="這次邀請的分享範圍"
-          />
-          <Button type="submit" size="sm">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="submit" size="sm" variant="secondary" disabled={busy !== null}>
+            {busy === "add" ? "新增中…" : "新增"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy !== null}
+            onClick={() => void inviteOnLine()}
+          >
             <ShareIcon className="size-4" />
-            用 LINE 邀請
+            {busy === "line" ? "複製中…" : "用 LINE 邀請"}
           </Button>
         </div>
       </form>
@@ -598,13 +711,11 @@ function ShareCard() {
 
 function RecipientRow({
   recipient,
-  onScopeChange,
   onShare,
   onCopy,
   onRemove,
 }: {
   recipient: ShareRecipient;
-  onScopeChange: (scope: ShareScope) => void;
   onShare: () => void;
   onCopy: () => void;
   onRemove: () => void;
@@ -637,14 +748,7 @@ function RecipientRow({
         </div>
       </div>
 
-      <Segmented
-        options={SCOPE_OPTIONS}
-        value={recipient.scope}
-        onChange={onScopeChange}
-        ariaLabel={`${label}的分享範圍`}
-      />
-
-      <div className="ml-auto flex items-center gap-1 sm:ml-0">
+      <div className="ml-auto flex items-center gap-1">
         {accepted ? null : (
           <>
             <Button

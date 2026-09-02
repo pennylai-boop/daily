@@ -18,7 +18,13 @@ const PRESET_OPTIONS = FOCUS_PRESETS.map((minutes) => ({
 
 export function FocusScreen() {
   const { state, ready } = useDailyStore();
-  const focus = state.focus ?? { pomodoroMinutes: 25, runningStartedAt: null, runningPlannedMinutes: 25, sessions: [] };
+  const focus = state.focus ?? {
+    pomodoroMinutes: 25,
+    runningStartedAt: null,
+    runningPlannedMinutes: 25,
+    runningKind: "timed" as const,
+    sessions: [],
+  };
   const minutes = ready ? focus.pomodoroMinutes : 25;
   const isPreset = (FOCUS_PRESETS as readonly number[]).includes(minutes);
   const [customMode, setCustomMode] = useState(false);
@@ -27,7 +33,6 @@ export function FocusScreen() {
 
   const today = todayIso();
   const todaySeconds = ready ? todayFocusSeconds(focus.sessions, today) : 0;
-  const todayCount = ready ? focus.sessions.filter((session) => session.date === today).length : 0;
   const recent = ready ? [...focus.sessions].reverse().slice(0, 20) : [];
 
   const setMinutes = (next: number, custom = false) => {
@@ -41,11 +46,11 @@ export function FocusScreen() {
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeading
         title="專心模式"
-        description="選一個番茄鐘時間後開始。進行中會鎖定天天 daily，並請系統進入全螢幕。瀏覽器沒辦法關掉其他 App；iPhone 可連按側鍵三次開引導使用。"
+        description="選好時長後按「開始時長」倒數，或按「直接計時」像碼表一樣往上加。進行中會鎖定天天 daily，並請系統進入全螢幕。瀏覽器沒辦法關掉其他 App；iPhone 可連按側鍵三次開引導使用。"
       />
 
       <Card className="space-y-4 px-4 py-4 sm:px-5">
-        <SectionHeading title="專心時間" description="一顆番茄鐘的倒數長度，開始後不能中途改。" />
+        <SectionHeading title="專心時間" description="開始時長會倒數這段時間；直接計時不設上限，按結束才停。" />
 
         <Field label="預設時長">
           <Segmented
@@ -81,18 +86,27 @@ export function FocusScreen() {
           </label>
         ) : null}
 
-        <Button size="lg" className="w-full" disabled={!ready} onClick={() => startFocusSession(minutes)}>
-          開始專心 {minutes} 分鐘
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="lg" disabled={!ready} onClick={() => startFocusSession(minutes, "timed")}>
+            開始時長
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            disabled={!ready}
+            onClick={() => startFocusSession(undefined, "open")}
+          >
+            直接計時
+          </Button>
+        </div>
       </Card>
 
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading title="今天的工作時長" description="含提早結束的時間；倒數走完會整段記入。" />
-        <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-ink">
+      <Card className="px-4 py-6 sm:px-5">
+        <p
+          className="text-center text-4xl font-semibold tabular-nums tracking-tight text-ink"
+          aria-label="今日總時長"
+        >
           {formatDuration(todaySeconds)}
-        </p>
-        <p className="mt-1 text-[13px] text-ink-muted">
-          {!ready ? "讀取中…" : todayCount === 0 ? "今天還沒有專心紀錄。" : `今天 ${todayCount} 段`}
         </p>
       </Card>
 
@@ -108,7 +122,9 @@ export function FocusScreen() {
               <li key={session.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">{formatWhen(session.startedAt)}</p>
-                  <p className="mt-0.5 text-[12px] text-ink-subtle">計畫 {session.plannedMinutes} 分鐘</p>
+                  <p className="mt-0.5 text-[12px] text-ink-subtle">
+                    {session.plannedMinutes > 0 ? `計畫 ${session.plannedMinutes} 分鐘` : "碼表"}
+                  </p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-semibold tabular-nums text-ink">

@@ -304,7 +304,7 @@ function niceTop(range: number, ticks: number): number {
 
 /** 折線色票依 docs/UI_design_system2.md §1.2：橘、藍在前，其餘為灰與藍紫階。 */
 export const SERIES_COLORS = [
-  "#e86e2c",
+  "var(--brand)",
   "#262f8b",
   "#6b7280",
   "#4a5499",

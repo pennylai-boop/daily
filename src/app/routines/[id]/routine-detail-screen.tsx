@@ -152,19 +152,19 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
               size="sm"
               variant="ghost"
               aria-label="上一個月"
-              className="size-8 shrink-0 border border-line-strong px-0"
+              className="size-10 shrink-0 px-0"
               onClick={() => setMonthIso(addMonths(monthIso, -1))}
             >
-              <ChevronLeftIcon className="size-6" strokeWidth={2} />
+              <ChevronLeftIcon className="size-8" strokeWidth={2.2} />
             </Button>
             <Button
               size="sm"
               variant="ghost"
               aria-label="下一個月"
-              className="size-8 shrink-0 border border-line-strong px-0"
+              className="size-10 shrink-0 px-0"
               onClick={() => setMonthIso(addMonths(monthIso, 1))}
             >
-              <ChevronRightIcon className="size-6" strokeWidth={2} />
+              <ChevronRightIcon className="size-8" strokeWidth={2.2} />
             </Button>
           </div>
         </div>

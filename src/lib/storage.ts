@@ -178,10 +178,11 @@ const FOCUS_SESSION_LIMIT = 200;
 function normalizeFocus(value: unknown): FocusState {
   if (!isRecord(value)) return { ...DEFAULT_FOCUS };
   const minutes = Math.max(1, Math.min(180, Math.trunc(Number(value.pomodoroMinutes) || 25)));
-  const runningMinutes = Math.max(
-    1,
-    Math.min(180, Math.trunc(Number(value.runningPlannedMinutes) || minutes)),
-  );
+  const runningKind = value.runningKind === "open" ? "open" : "timed";
+  const runningMinutes =
+    runningKind === "open"
+      ? 0
+      : Math.max(1, Math.min(180, Math.trunc(Number(value.runningPlannedMinutes) || minutes)));
   const sessions = Array.isArray(value.sessions)
     ? value.sessions
         .map(normalizeFocusSession)
@@ -193,6 +194,7 @@ function normalizeFocus(value: unknown): FocusState {
     pomodoroMinutes: minutes,
     runningStartedAt: typeof value.runningStartedAt === "string" ? value.runningStartedAt : null,
     runningPlannedMinutes: runningMinutes,
+    runningKind,
     sessions,
   };
 }
@@ -204,7 +206,7 @@ function normalizeFocusSession(value: unknown): FocusSession | null {
   return {
     id: value.id,
     date: value.date,
-    plannedMinutes: Math.max(1, Math.trunc(Number(value.plannedMinutes) || 1)),
+    plannedMinutes: Math.max(0, Math.trunc(Number(value.plannedMinutes) || 0)),
     elapsedSeconds: Math.max(0, Math.trunc(Number(value.elapsedSeconds) || 0)),
     startedAt: value.startedAt,
     endedAt: value.endedAt,
@@ -477,9 +479,14 @@ function normalizeTimerDefaults(value: unknown): TimerDefaults {
 }
 
 export function loadTheme(): ThemePreference {
-  if (typeof window === "undefined") return "system";
-  const raw = window.localStorage.getItem(THEME_KEY);
-  return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
+  if (typeof window === "undefined") return "orange";
+  return normalizeTheme(window.localStorage.getItem(THEME_KEY));
+}
+
+/** 舊的 light／system 對到橘色；dark 維持深色。 */
+export function normalizeTheme(raw: string | null): ThemePreference {
+  if (raw === "orange" || raw === "blue" || raw === "dark") return raw;
+  return "orange";
 }
 
 export function saveTheme(theme: ThemePreference): void {
@@ -500,6 +507,13 @@ export function createId(): string {
 
 /** 邀請碼會出現在連結裡也可能被唸出來，避開容易看錯的 0/O、1/I。 */
 const INVITE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/** 常駐分享 ID 存在 share_invites.name，不出現在「分享給誰看」名單。 */
+export const STANDING_INVITE_NAME = "__standing__";
+
+export function isShareId(value: string): boolean {
+  return /^[2-9A-HJ-NP-Z]{8}$/i.test(value.trim());
+}
 
 export function createInviteCode(length = 8): string {
   const bytes = new Uint8Array(length);

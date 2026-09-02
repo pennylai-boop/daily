@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -7,12 +7,7 @@ import { BlockEditor } from "@/components/entry/block-editor";
 import { FocusList } from "@/components/entry/focus-list";
 import { MoodField, MoodGlyph } from "@/components/entry/mood-picker";
 import { PhotoStrip } from "@/components/entry/photo-strip";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ImageIcon,
-  TrashIcon,
-} from "@/components/icons";
+import { ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "@/components/icons";
 import { RoutineCheckGrid } from "@/components/routines/check-grid";
 import { Button, LinkButton } from "@/components/ui/button";
 import { CollapsibleSection } from "@/components/ui/collapsible";
@@ -38,7 +33,6 @@ import {
   type DayEntry,
   type EntryBlock,
   type IsoDate,
-  type LineShareTarget,
   type Routine,
 } from "@/lib/types";
 
@@ -68,8 +62,8 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [targetId, setTargetId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [sentGroups, setSentGroups] = useState<string[]>([]);
 
   const editable = canEditEntry(date);
   const deletable = canDeleteEntry(date);
@@ -160,41 +154,36 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     [state.settings.line.targets],
   );
 
-  const share = async (target: LineShareTarget | null) => {
-    setPicking(false);
+  const sendToday = async () => {
     setSharing(true);
     setShareMessage(null);
     try {
-      const result = await shareDayImage(draft, state.routines, checkedIds, state.customMoods);
-      if (target) markLineTargetUsed(target.id);
+      const { result, previewUrl: nextPreview } = await shareDayImage(
+        draft,
+        state.routines,
+        checkedIds,
+        state.customMoods,
+      );
+      setPreviewUrl(nextPreview);
+      const names = shareTargets.map((target) => target.name);
+      setSentGroups(names);
+      for (const target of shareTargets) markLineTargetUsed(target.id);
       if (result === "downloaded") {
         setShareMessage(
-          target
-            ? `已下載圖片，傳到 LINE 的「${target.name}」即可。`
-            : "已下載圖片，可以直接傳到 LINE 或其他地方。",
+          names.length > 0
+            ? `已下載圖片，傳到 LINE 的「${names.join("、")}」即可。`
+            : "已下載圖片，可以直接傳到 LINE。",
         );
-      } else if (target) {
-        setShareMessage(`分享面板開好了，選 LINE →「${target.name}」送出。`);
+      } else if (names.length > 0) {
+        setShareMessage(`分享面板開好了，選 LINE →「${names.join("、")}」送出。`);
       }
     } catch (error) {
-      // 使用者在系統分享面板按取消時會拋出 AbortError，不需要提示。
       if ((error as Error).name !== "AbortError") {
         setShareMessage("圖片產生失敗，請再試一次。");
       }
     } finally {
       setSharing(false);
     }
-  };
-
-  /** 沒有記過對象就不必多一層確認，直接開分享面板。 */
-  const startShare = () => {
-    if (shareTargets.length === 0) {
-      void share(null);
-      return;
-    }
-    setTargetId(shareTargets[0].id);
-    setShareMessage(null);
-    setPicking(true);
   };
 
   return (
@@ -376,9 +365,9 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       </div>
 
       {hasContent(draft) ? (
-        <footer className="space-y-2 border-t border-line pt-4">
-          <div className="flex items-center justify-between gap-3">
-            {deletable ? (
+        <footer className="space-y-3 pt-2">
+          {deletable ? (
+            <div className="flex justify-end">
               <Button
                 variant="ghost"
                 size="sm"
@@ -389,123 +378,59 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
                   setDraft(createDayEntry(date));
                   setDirty(false);
                   setStatus("idle");
+                  setPreviewUrl(null);
+                  setSentGroups([]);
                 }}
               >
                 <TrashIcon className="size-4" />
                 <span className="hidden sm:inline">刪除這天的紀錄</span>
                 <span className="sm:hidden">刪除</span>
               </Button>
-            ) : (
-              <p className="text-[13px] text-ink-subtle">過去的紀錄不可刪除</p>
-            )}
+            </div>
+          ) : null}
 
-            <Button
-              size="sm"
-              disabled={sharing}
-              className="min-w-0 shrink"
-              onClick={() => (picking ? setPicking(false) : startShare())}
-            >
-              <ImageIcon className="size-4 shrink-0" />
-              <span className="truncate">{sharing ? "產生圖片中…" : "分享成圖片"}</span>
-            </Button>
-          </div>
+          <Button
+            disabled={sharing}
+            className="h-14 w-full rounded-xl text-lg font-bold"
+            onClick={() => void sendToday()}
+          >
+            {sharing ? "產生圖片中…" : "傳送今天"}
+          </Button>
 
-          {picking ? (
-            <ShareTargetPicker
-              targets={shareTargets}
-              selectedId={targetId}
-              onSelect={setTargetId}
-              onCancel={() => setPicking(false)}
-              onConfirm={() =>
-                void share(shareTargets.find((target) => target.id === targetId) ?? null)
-              }
-            />
+          {previewUrl ? (
+            <div className="space-y-3 rounded-xl border border-line bg-surface px-3 py-3">
+              <p className="text-[13px] font-medium text-ink-muted">傳送預覽</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl}
+                alt={`${formatFullDate(date)} 的分享圖`}
+                className="mx-auto max-h-[28rem] w-full rounded-lg border border-line object-contain"
+              />
+              {sentGroups.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[13px] font-medium text-ink">已傳給</p>
+                  <div className="flex flex-wrap gap-2">
+                    {sentGroups.map((name) => (
+                      <Chip key={name} tone="brand">
+                        {name}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[13px] text-ink-muted">
+                  還沒記下群組。可到設定新增，之後這裡會列出已傳的對象。
+                </p>
+              )}
+            </div>
           ) : null}
 
           {shareMessage ? (
-            <p className="text-right text-xs text-ink-muted">{shareMessage}</p>
+            <p className="text-center text-[13px] text-ink-muted">{shareMessage}</p>
           ) : null}
         </footer>
       ) : null}
     </div>
-  );
-}
-
-/**
- * 送出前挑一個常傳的對象再確認。
- *
- * 挑選只影響提示文字與排序：瀏覽器沒有辦法把訊息直接投進某個 LINE 群組，
- * 按下確認後仍然是開系統分享面板，由使用者在 LINE 裡選同一個對象。
- */
-function ShareTargetPicker({
-  targets,
-  selectedId,
-  onSelect,
-  onCancel,
-  onConfirm,
-}: {
-  targets: LineShareTarget[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-line bg-surface-muted/50 p-3">
-      <p className="text-[13px] font-medium text-ink">要傳給誰？</p>
-      <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="分享對象">
-        {targets.map((target) => (
-          <TargetChip
-            key={target.id}
-            label={target.name}
-            selected={selectedId === target.id}
-            onSelect={() => onSelect(target.id)}
-          />
-        ))}
-        <TargetChip
-          label="不指定"
-          selected={selectedId === null}
-          onSelect={() => onSelect(null)}
-        />
-      </div>
-      <p className="mt-2 text-xs text-ink-subtle">
-        確認後會開啟分享面板，在裡面選 LINE 與同一個對象即可送出。
-      </p>
-      <div className="mt-3 flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          取消
-        </Button>
-        <Button size="sm" onClick={onConfirm}>
-          確認發送
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function TargetChip({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={
-        selected
-          ? "max-w-full truncate rounded-full bg-brand px-3 py-1.5 text-[13px] font-medium text-on-brand"
-          : "max-w-full truncate rounded-full border border-line-strong px-3 py-1.5 text-[13px] text-ink-muted transition-colors hover:border-ink-subtle hover:text-ink"
-      }
-    >
-      {label}
-    </button>
   );
 }
 

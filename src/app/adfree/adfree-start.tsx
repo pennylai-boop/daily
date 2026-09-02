@@ -90,9 +90,11 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
           <p className="text-[13px] leading-relaxed text-ink-muted">
             請先用 LINE 登入，訂閱才綁得上你的帳號，換裝置也接得回來。登入後會直接前往付款頁。
           </p>
-          <Button size="lg" disabled={busy} onClick={() => void login()}>
-            {busy ? "前往登入…" : "用 LINE 登入並前往付款"}
-          </Button>
+          <div className="flex justify-end">
+            <Button size="lg" disabled={busy} onClick={() => void login()}>
+              {busy ? "前往登入…" : "用 LINE 登入並前往付款"}
+            </Button>
+          </div>
         </Card>
       ) : (
         <Card className="space-y-3 px-4 py-4 sm:px-5">
@@ -105,9 +107,11 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
           </p>
           {notice ? <p className="text-[13px] font-semibold text-alert">{notice}</p> : null}
           {notice ? (
-            <Button size="lg" disabled={busy} onClick={() => void retry()}>
-              {busy ? "前往付款…" : "再試一次"}
-            </Button>
+            <div className="flex justify-end">
+              <Button size="lg" disabled={busy} onClick={() => void retry()}>
+                {busy ? "前往付款…" : "再試一次"}
+              </Button>
+            </div>
           ) : null}
         </Card>
       )}
