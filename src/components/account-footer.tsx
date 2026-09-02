@@ -3,9 +3,10 @@
 import { useState } from "react";
 
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { Button, LinkButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account";
+import { signInWithLine } from "@/lib/line-auth";
 import type { Profile } from "@/lib/types";
 
 /**
@@ -22,7 +23,21 @@ export function AccountFooter({
   onNavigate?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const loggedIn = Boolean(profile.lineUserId);
+
+  const login = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await signInWithLine();
+      if (result.status === "unavailable") setError(result.reason);
+    } catch {
+      setError("LINE 登入沒有成功，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const logout = async () => {
     if (!window.confirm(SIGN_OUT_CONFIRM)) return;
@@ -35,15 +50,16 @@ export function AccountFooter({
   if (!loggedIn) {
     return (
       <div className={cn("border-t border-line pt-4", className)}>
-        <LinkButton
-          href="/settings"
+        <Button
+          type="button"
           variant="secondary"
           size="sm"
-          onClick={onNavigate}
-          className="no-underline"
+          disabled={busy}
+          onClick={() => void login()}
         >
-          用 LINE 登入
-        </LinkButton>
+          {busy ? "前往 LINE…" : "用 LINE 登入"}
+        </Button>
+        {error ? <p className="mt-2 text-[13px] text-ink-muted">{error}</p> : null}
       </div>
     );
   }

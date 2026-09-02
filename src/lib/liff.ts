@@ -22,6 +22,7 @@ export interface LiffLike {
     displayName: string;
     pictureUrl?: string;
   }>;
+  isInClient: () => boolean;
   isApiAvailable: (name: string) => boolean;
   /** 使用者按取消時回傳 null。isMultiple 可一次選多個聊天室。 */
   shareTargetPicker: (
@@ -38,6 +39,25 @@ declare global {
 
 export function liffId(): string {
   return process.env.NEXT_PUBLIC_LIFF_ID?.trim() ?? "";
+}
+
+/** 用 LINE 開這個 LIFF。路徑不另加，避免 Endpoint 已是 /settings 時變成 /settings/settings。 */
+export function liffAppUrl(query: Record<string, string> = {}): string | null {
+  const id = liffId();
+  if (!id) return null;
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value) params.set(key, value);
+  }
+  const search = params.toString();
+  return `https://liff.line.me/${id}${search ? `?${search}` : ""}`;
+}
+
+export function openLiffInLine(query: Record<string, string> = {}): boolean {
+  const url = liffAppUrl(query);
+  if (!url) return false;
+  window.location.assign(url);
+  return true;
 }
 
 let ready: Promise<LiffLike | null> | null = null;

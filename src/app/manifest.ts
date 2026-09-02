@@ -21,8 +21,9 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#f3f4f6",
     categories: ["lifestyle", "productivity"],
     icons: [
-      // 太陽造型的品牌標記；SVG 一份就能吃下所有尺寸。
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+      { src: "/icon-192", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icon-512", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/apple-icon", sizes: "180x180", type: "image/png", purpose: "any" },
     ],
   };

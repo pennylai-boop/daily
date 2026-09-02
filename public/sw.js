@@ -12,7 +12,7 @@
  * 這種部署也要跟著進 VERSION，否則舊 chunk 會一直留在 ASSET_CACHE 裡被 cache-first 命中。
  */
 
-const VERSION = "v10";
+const VERSION = "v11";
 const SHELL_CACHE = `daily-shell-${VERSION}`;
 const ASSET_CACHE = `daily-assets-${VERSION}`;
 const SHELL_ROUTES = ["/", "/routines", "/focus", "/insights", "/divination", "/shared", "/settings"];

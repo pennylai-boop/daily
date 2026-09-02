@@ -52,7 +52,7 @@
 }
 
 [data-ads="on"] {
-  --ad-bar-h: 5.75rem;
+  --ad-bar-h: 3.25rem;
   --ad-bar-offset: calc(66px + env(safe-area-inset-bottom, 0px));
 }
 

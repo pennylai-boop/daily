@@ -15,21 +15,23 @@ export function AdBanner() {
 
   return (
     <aside
-      className="hide-in-ios-app fixed inset-x-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] lg:pb-0"
+      className="hide-in-ios-app fixed inset-x-0 z-30 bg-surface pb-[env(safe-area-inset-bottom,0px)] lg:pb-0"
       style={{ bottom: "var(--ad-bar-offset, 0px)" }}
       aria-label="廣告"
     >
-      <div className="mx-auto flex max-w-5xl flex-col gap-1.5 px-3 py-1.5 sm:px-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] tracking-wide text-ink-subtle">廣告</p>
+      <div className="relative w-full">
+        {ads ? <AdSenseUnit client={ads.client} slot={ads.slot} /> : <AdPlaceholder />}
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 px-2 pt-1">
+          <p className="rounded bg-surface/80 px-1.5 py-0.5 text-[11px] tracking-wide text-ink-subtle">
+            廣告
+          </p>
           <Link
             href="/adfree"
-            className="adfree-link text-[11px] font-medium underline-offset-2 hover:underline"
+            className="adfree-link pointer-events-auto rounded bg-surface/80 px-1.5 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline"
           >
             訂閱無廣告 NT$50／月
           </Link>
         </div>
-        {ads ? <AdSenseUnit client={ads.client} slot={ads.slot} /> : <AdPlaceholder />}
       </div>
       {ads ? (
         <Script
@@ -44,7 +46,7 @@ export function AdBanner() {
 
 function AdPlaceholder() {
   return (
-    <div className="flex h-[50px] items-center justify-center rounded-md bg-surface-muted text-[12px] text-ink-subtle">
+    <div className="flex h-[50px] w-full items-center justify-center bg-surface-muted text-[12px] text-ink-subtle">
       廣告位置（尚未設定 AdSense）
     </div>
   );
@@ -68,7 +70,7 @@ function AdSenseUnit({ client, slot }: { client: string; slot: string }) {
   return (
     <ins
       className="adsbygoogle block"
-      style={{ display: "block", minHeight: 50 }}
+      style={{ display: "block", width: "100%", minHeight: 50 }}
       data-ad-client={client}
       data-ad-slot={slot}
       data-ad-format="horizontal"

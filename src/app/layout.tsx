@@ -27,7 +27,11 @@ export const metadata: Metadata = {
   },
   appleWebApp: { capable: true, title: "天天", statusBarStyle: "default" },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512", sizes: "512x512", type: "image/png" },
+    ],
     apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
   },
 };

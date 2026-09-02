@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCardDate, formatFullDate } from "./date";
+import { ensureLiff } from "./liff";
 import { DEFAULT_MOOD, findMood, type MoodOption } from "./moods";
 import { blobToDataUrl, hasNativeShare, nativeShare } from "./native-bridge";
 import { getMark, getTemplate, groupMindfulnessItems, isBlockEmpty, summarizeBlock } from "./templates";
@@ -16,19 +17,23 @@ const WIDTH = 1080;
 const PADDING = 76;
 const CONTENT_WIDTH = WIDTH - PADDING * 2;
 
-/** 分享圖走手帳風格：米格紙、黑字、淺綠心情標。 */
+/** 分享圖：白底＋3% 橘、灰點、橘色粗框。 */
 const COLORS = {
-  paper: "#f6f3ea",
-  card: "#f6f3ea",
+  paper: "#ffffff",
+  wash: "rgba(232, 110, 44, 0.03)",
+  card: "#ffffff",
   ink: "#1a1a1a",
   inkMuted: "#4b5563",
   inkSubtle: "#8a8478",
-  brand: "#1a1a1a",
+  brand: "#e86e2c",
   brandTint: "#d7ebc8",
   accent: "#2f6b3a",
-  line: "#d9d3c4",
-  grid: "rgba(26, 26, 26, 0.06)",
+  line: "#e4c4b0",
+  dot: "rgba(156, 163, 175, 0.55)",
+  frame: "#e86e2c",
 };
+
+const FRAME = 18;
 
 const FONT_STACK =
   '"PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Hiragino Sans TC", system-ui, sans-serif';
@@ -192,7 +197,12 @@ class PageBuilder {
     this.y += lines.length * Math.round(size * 1.7) + 10;
   }
 
-  header(entry: DayEntry, mood: MoodOption | null, moodIcon: HTMLImageElement | null) {
+  header(
+    entry: DayEntry,
+    mood: MoodOption | null,
+    moodIcon: HTMLImageElement | null,
+    brandLogo: HTMLImageElement | null,
+  ) {
     const y = this.y;
     const { weekday, monthDay } = formatCardDate(entry.date);
 
@@ -204,7 +214,7 @@ class PageBuilder {
       ctx.fillRect(PADDING, y + 34, ctx.measureText(weekday).width, 2);
       ctx.font = this.font(38, 600);
       ctx.fillText(monthDay, PADDING, y + 82);
-      drawSun(ctx, WIDTH - PADDING - 18, y + 28, 17);
+      if (brandLogo) ctx.drawImage(brandLogo, WIDTH - PADDING - 56, y + 4, 56, 56);
     });
     this.y += 120;
 
@@ -291,26 +301,31 @@ class PageBuilder {
   paint(ctx: CanvasRenderingContext2D, height: number) {
     ctx.fillStyle = COLORS.paper;
     ctx.fillRect(0, 0, WIDTH, height);
-    ctx.strokeStyle = COLORS.grid;
-    ctx.lineWidth = 1;
-    const step = 32;
-    for (let x = 0; x <= WIDTH; x += step) {
-      ctx.beginPath();
-      ctx.moveTo(x + 0.5, 0);
-      ctx.lineTo(x + 0.5, height);
-      ctx.stroke();
+    ctx.fillStyle = COLORS.wash;
+    ctx.fillRect(0, 0, WIDTH, height);
+
+    ctx.fillStyle = COLORS.dot;
+    const step = 22;
+    const radius = 1.7;
+    for (let y = step / 2; y < height; y += step) {
+      for (let x = step / 2; x < WIDTH; x += step) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
-    for (let y = 0; y <= height; y += step) {
-      ctx.beginPath();
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(WIDTH, y + 0.5);
-      ctx.stroke();
-    }
+
     for (const command of this.commands) {
       ctx.save();
       command(ctx);
       ctx.restore();
     }
+
+    ctx.fillStyle = COLORS.frame;
+    ctx.fillRect(0, 0, WIDTH, FRAME);
+    ctx.fillRect(0, height - FRAME, WIDTH, FRAME);
+    ctx.fillRect(0, 0, FRAME, height);
+    ctx.fillRect(WIDTH - FRAME, 0, FRAME, height);
   }
 }
 
@@ -365,23 +380,7 @@ function drawPolaroid(
   drawCover(ctx, image, x + frame, y + frame, width - frame * 2, height - frame, 2);
 }
 
-function drawSun(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
-  ctx.save();
-  ctx.strokeStyle = COLORS.ink;
-  ctx.lineWidth = 2.4;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius * 0.46, 0, Math.PI * 2);
-  ctx.stroke();
-  for (let i = 0; i < 8; i += 1) {
-    const angle = (Math.PI / 4) * i - Math.PI / 2;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(angle) * radius * 0.68, cy + Math.sin(angle) * radius * 0.68);
-    ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
+const BRAND_ICON_SRC = "/icon.svg";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -469,8 +468,9 @@ export async function buildDayImage(
 
   const mood = findMood(entry.mood, customMoods) ?? DEFAULT_MOOD;
   // Canvas 只能畫已經載入完成的圖，所以排版前先把心情圖示與照片都解碼好。
-  const [moodIcon, photos] = await Promise.all([
+  const [moodIcon, brandLogo, photos] = await Promise.all([
     mood?.image ? loadImage(mood.image) : Promise.resolve(null),
+    loadImage(BRAND_ICON_SRC).catch(() => null),
     Promise.all(
       entry.photos.map(async (photo) => ({ photo, image: await loadImage(photo.dataUrl) })),
     ),
@@ -478,7 +478,7 @@ export async function buildDayImage(
 
   const page = new PageBuilder(measureContext);
   page.space(PADDING);
-  page.header(entry, mood, moodIcon);
+  page.header(entry, mood, moodIcon, brandLogo);
   page.space(12);
 
   if (entry.focus.length > 0) {
@@ -568,52 +568,85 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-export type ShareResult = "native" | "shared" | "downloaded";
-
-export type ShareOutcome = {
-  result: ShareResult;
+export type PreparedDayImage = {
+  date: string;
+  fileName: string;
+  blob: Blob;
   previewUrl: string;
 };
 
-/**
- * 三條路徑，依序嘗試：
- * 1. 原生殼的分享橋接（WebView 沒有 Web Share API，也存不下 blob 連結的下載）
- * 2. 瀏覽器的 Web Share API（手機上可以直接選 LINE）
- * 3. 下載 PNG（桌機瀏覽器）
- */
-export async function shareDayImage(
+export function revokePreparedImage(image: PreparedDayImage | null) {
+  if (image?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
+}
+
+export async function prepareDayImage(
   entry: DayEntry,
   routines: Routine[],
   checkedIds: string[],
   customMoods: CustomMood[] = [],
-): Promise<ShareOutcome> {
+): Promise<PreparedDayImage> {
   const canvas = await buildDayImage(entry, routines, checkedIds, customMoods);
   const blob = await toBlob(canvas);
-  const previewUrl = canvas.toDataURL("image/jpeg", 0.72);
-  const fileName = `daily-${entry.date}.png`;
-  const title = `天天 daily｜${formatFullDate(entry.date)}`;
+  return {
+    date: entry.date,
+    fileName: `daily-${entry.date}.png`,
+    blob,
+    previewUrl: URL.createObjectURL(blob),
+  };
+}
+
+export function downloadPreparedImage(image: PreparedDayImage) {
+  const anchor = document.createElement("a");
+  anchor.href = image.previewUrl;
+  anchor.download = image.fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+export type SendImageResult = "shared" | "cancelled" | "unavailable";
+
+/** 發到手帳圖：原生殼 → 系統分享（可選 LINE）→ LIFF 好友選擇。 */
+export async function sendPreparedImage(image: PreparedDayImage): Promise<SendImageResult> {
+  const title = `天天 daily｜${formatFullDate(image.date)}`;
+  const file = new File([image.blob], image.fileName, { type: "image/png" });
 
   if (hasNativeShare()) {
     const handled = await nativeShare({
       kind: "image",
-      fileName,
+      fileName: image.fileName,
       title,
-      dataUrl: await blobToDataUrl(blob),
+      dataUrl: await blobToDataUrl(image.blob),
     });
-    if (handled) return { result: "native", previewUrl };
+    if (handled) return "shared";
   }
 
-  const file = new File([blob], fileName, { type: "image/png" });
   if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title });
-    return { result: "shared", previewUrl };
+    try {
+      await navigator.share({ files: [file], title });
+      return "shared";
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return "cancelled";
+    }
   }
 
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-  return { result: "downloaded", previewUrl };
+  const liff = await ensureLiff();
+  if (liff?.isApiAvailable("shareTargetPicker") && liff.isLoggedIn()) {
+    try {
+      const result = await liff.shareTargetPicker(
+        [
+          {
+            type: "text",
+            text: `${title}\n請把剛剛預覽的手帳圖傳到這個聊天室。`,
+          },
+        ],
+        { isMultiple: true },
+      );
+      return result ? "shared" : "cancelled";
+    } catch {
+      return "unavailable";
+    }
+  }
+
+  return "unavailable";
 }

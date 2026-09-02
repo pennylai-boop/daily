@@ -21,19 +21,24 @@ comment on table public.pep_talk_quotes is
 
 alter table public.pep_talk_quotes enable row level security;
 
+drop policy if exists pep_talk_quotes_select_all on public.pep_talk_quotes;
 create policy pep_talk_quotes_select_all
   on public.pep_talk_quotes for select
   using (true);
 
+drop policy if exists pep_talk_quotes_insert_own on public.pep_talk_quotes;
 create policy pep_talk_quotes_insert_own
   on public.pep_talk_quotes for insert
   to authenticated
   with check (auth.uid() = user_id);
 
+drop policy if exists pep_talk_quotes_delete_own on public.pep_talk_quotes;
 create policy pep_talk_quotes_delete_own
   on public.pep_talk_quotes for delete
   to authenticated
   using (auth.uid() = user_id);
 
-grant select on public.pep_talk_quotes to anon, authenticated;
-grant insert, delete on public.pep_talk_quotes to authenticated;
+grant select on public.pep_talk_quotes to anon, authenticated, service_role;
+grant insert, delete on public.pep_talk_quotes to authenticated, service_role;
+
+notify pgrst, 'reload schema';

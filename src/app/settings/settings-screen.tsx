@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { ImageIcon, LinkIcon, ShareIcon, TrashIcon } from "@/components/icons";
+import { ShareDayDialog } from "@/components/share-day-dialog";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
@@ -14,10 +15,10 @@ import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account"
 import { AdFreeCard } from "@/components/adfree-card";
 import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
-import { copyInviteUrl, pickLineChat, shareInvite } from "@/lib/line-invite";
+import { copyInviteUrl, LINE_INVITE_QUERY, LINE_PICK_QUERY, pickLineChat, shareInvite } from "@/lib/line-invite";
 import { sessionAccessToken } from "@/lib/session-token";
 import { isShareId } from "@/lib/storage";
-import { shareDayImage } from "@/lib/share-image";
+import { prepareDayImage, revokePreparedImage, type PreparedDayImage } from "@/lib/share-image";
 import { signInWithLine } from "@/lib/line-auth";
 import { DEFAULT_PEP_TALKS } from "@/lib/pep-talk";
 import { hasContent } from "@/lib/stats";
@@ -27,7 +28,6 @@ import {
   refreshSharedPepTalks,
   removeSharedPepTalk,
   createDayEntry,
-  markLineTargetUsed,
   useDailyStore,
 } from "@/lib/store";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
@@ -401,6 +401,26 @@ function LegalLinks() {
  * 按新增會打開 LINE 的好友與群組列表。選完後本機只記顯示名稱，
  * 因為 LINE 基於隱私不會把選到的聊天室身分回給網頁。
  */
+function clearLineInviteQuery() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has(LINE_INVITE_QUERY) && !params.has("code")) return;
+  params.delete(LINE_INVITE_QUERY);
+  params.delete("code");
+  const search = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+}
+
+function clearLinePickQuery() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has(LINE_PICK_QUERY) && !params.has("label")) return;
+  params.delete(LINE_PICK_QUERY);
+  params.delete("label");
+  const search = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+}
+
 function ShareTargetsCard() {
   const store = useDailyStore();
   const { targets } = store.state.settings.line;
@@ -408,21 +428,32 @@ function ShareTargetsCard() {
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [shareImage, setShareImage] = useState<PreparedDayImage | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareImageRef = useRef<PreparedDayImage | null>(null);
+  shareImageRef.current = shareImage;
+  const autoPicked = useRef(false);
 
-  const addFromLine = async () => {
+  const addFromLine = async (presetName?: string, fromLiffReturn = false) => {
     setPicking(true);
     setNote(null);
-    const result = await pickLineChat();
+    const label = (presetName ?? name).trim().slice(0, 30);
+    const result = await pickLineChat(label, { fromLiffReturn });
     setPicking(false);
 
+    if (result === "redirect") {
+      setNote("正在打開 LINE，選好好友或群組後會自動加進來。");
+      return;
+    }
+    clearLinePickQuery();
     if (result === "cancelled") return;
     if (result === "unavailable") {
-      setNote("請在 LINE App 內開啟天天 daily，才能從好友與群組列表選取。");
+      setNote("打不開 LINE 的好友列表。請確認已安裝 LINE，或到 LINE Developers 把這個 LIFF 的「分享對象選擇」打開。");
       return;
     }
 
     const used = new Set(targets.map((target) => target.name));
-    let next = name.trim().slice(0, 30);
+    let next = label;
     if (!next) {
       let index = 1;
       while (used.has(`群組 ${index}`)) index += 1;
@@ -436,6 +467,18 @@ function ShareTargetsCard() {
     setNote(`已加入「${next}」。可再按新增繼續從 LINE 列表選。`);
   };
 
+  useEffect(() => {
+    if (autoPicked.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(LINE_PICK_QUERY) !== "1") return;
+    autoPicked.current = true;
+    const label = params.get("label") ?? "";
+    if (label) setName(label);
+    void addFromLine(label, true);
+    // 只在從 LIFF 深連結回來時跑一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sendToday = async () => {
     const today = todayIso();
     const entry = store.state.entries[today] ?? createDayEntry(today);
@@ -448,20 +491,12 @@ function ShareTargetsCard() {
     setSending(true);
     setNote(null);
     try {
-      const preferred = [...targets].sort((a, b) =>
-        (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""),
-      )[0];
-      const { result } = await shareDayImage(entry, store.state.routines, checkedIds, store.state.customMoods);
-      if (preferred) markLineTargetUsed(preferred.id);
-      if (result === "downloaded") {
-        setNote(
-          preferred
-            ? `已下載圖片，傳到 LINE 的「${preferred.name}」即可。`
-            : "已下載圖片，可以直接傳到 LINE。",
-        );
-      } else if (preferred) {
-        setNote(`分享面板開好了，選 LINE →「${preferred.name}」送出。`);
-      }
+      const next = await prepareDayImage(entry, store.state.routines, checkedIds, store.state.customMoods);
+      setShareImage((current) => {
+        revokePreparedImage(current);
+        return next;
+      });
+      setShareOpen(true);
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         setNote("圖片產生失敗，請再試一次。");
@@ -471,11 +506,13 @@ function ShareTargetsCard() {
     }
   };
 
+  useEffect(() => () => revokePreparedImage(shareImageRef.current), []);
+
   return (
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="常傳的 LINE 對象"
-        description="按新增會打開 LINE 的好友與群組列表。選取後可填顯示名稱方便辨認；傳送今天會把手帳圖送到你選的聊天室。"
+        description="按新增會打開 LINE 的好友與群組列表。選取後可填顯示名稱方便辨認；傳送今天會先預覽，再下載或發送到這些對象。"
       />
 
       <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -528,6 +565,13 @@ function ShareTargetsCard() {
           {sending ? "產生圖片中…" : "傳送今天"}
         </Button>
       </div>
+
+      <ShareDayDialog
+        open={shareOpen}
+        image={shareImage}
+        targets={targets}
+        onClose={() => setShareOpen(false)}
+      />
     </Card>
   );
 }
@@ -552,18 +596,21 @@ function ShareCard() {
     })();
   }, [profile.lineUserId]);
 
-  const sendLink = async (code: string) => {
+  const sendLink = async (code: string, fromLiffReturn = false) => {
     try {
-      const channel = await shareInvite(profile.name, code);
+      const channel = await shareInvite(profile.name, code, { fromLiffReturn });
+      if (channel !== "redirect") clearLineInviteQuery();
       setNote(
         {
           line: "已把邀請連結送到 LINE，對方點開後就能在「被分享」看到你的紀錄。",
           share: "已開啟分享面板，選 LINE 把連結傳給對方。",
           clipboard: "邀請連結已複製，貼到 LINE 傳給朋友即可。",
           cancelled: "已取消。可再按一次，或先複製右上角 ID。",
+          redirect: "正在打開 LINE，選好對象後會把邀請連結送過去。",
         }[channel],
       );
     } catch {
+      clearLineInviteQuery();
       await copyInviteUrl(code);
       setNote("邀請連結已複製，貼到 LINE 傳給朋友即可。");
     }
@@ -624,6 +671,19 @@ function ShareCard() {
     }
     void sendLink(code);
   };
+
+  const autoInvited = useRef(false);
+  useEffect(() => {
+    if (autoInvited.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(LINE_INVITE_QUERY) !== "1") return;
+    const code = params.get("code") ?? shareId ?? "";
+    if (!code) return;
+    autoInvited.current = true;
+    void sendLink(code, true);
+    // 只在從 LIFF 深連結回來時跑一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.lineUserId, shareId]);
 
   const ensureLocalShareId = async () => {
     const access = await sessionAccessToken();
@@ -699,7 +759,7 @@ function ShareCard() {
             onClick={() => void inviteOnLine()}
           >
             <ShareIcon className="size-4" />
-            {busy === "line" ? "複製中…" : "用 LINE 邀請"}
+            {busy === "line" ? "開啟 LINE…" : "用 LINE 邀請"}
           </Button>
         </div>
       </form>
@@ -721,29 +781,37 @@ function RecipientRow({
   onRemove: () => void;
 }) {
   const accepted = recipient.status === "accepted";
-  const label = recipient.name.trim() || "待接受的邀請";
+  const label = recipient.name.trim() || (accepted ? "LINE 朋友" : "待接受的邀請");
+  const theirId = isShareId(recipient.inviteCode) ? recipient.inviteCode.toUpperCase() : "";
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-xl border border-line px-3.5 py-3">
       <div className="flex w-full min-w-0 items-center gap-2.5 sm:w-auto sm:flex-1">
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-medium",
-            accepted ? "bg-accent text-on-accent" : "bg-paper text-ink-subtle",
-          )}
-        >
-          {accepted ? label.slice(0, 1) : "?"}
-        </span>
+        {accepted && recipient.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={recipient.avatarUrl}
+            alt=""
+            className="size-9 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-medium",
+              accepted ? "bg-accent text-on-accent" : "bg-paper text-ink-subtle",
+            )}
+          >
+            {accepted ? label.slice(0, 1) : "?"}
+          </span>
+        )}
         <div className="min-w-0">
           <p className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-ink">{label}</span>
             <Chip tone={accepted ? "accent" : "neutral"}>{accepted ? "已接受" : "待接受"}</Chip>
           </p>
-          <p className="mt-0.5 truncate text-[13px] text-ink-muted">
-            {accepted
-              ? `LINE ${maskLineUserId(recipient.lineUserId ?? "")}`
-              : `邀請碼 ${recipient.inviteCode}`}
+          <p className="mt-0.5 truncate font-mono text-[13px] tracking-wide text-ink-muted">
+            {theirId ? `ID ${theirId}` : accepted ? `LINE ${maskLineUserId(recipient.lineUserId ?? "")}` : `邀請碼 ${recipient.inviteCode}`}
           </p>
         </div>
       </div>

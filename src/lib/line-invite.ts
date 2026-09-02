@@ -9,11 +9,11 @@
  * 包成 App 之後一定走不到 LIFF（那是 LINE 自己瀏覽器裡的 API），因此第二順位是原生殼的分享橋接。
  */
 
-import { ensureLiff } from "./liff";
+import { ensureLiff, openLiffInLine } from "./liff";
 import { hasNativeShare, nativeShare } from "./native-bridge";
 
 /** line：LINE 好友選擇畫面；share：系統分享面板；clipboard：已複製連結。 */
-export type InviteChannel = "line" | "share" | "clipboard" | "cancelled";
+export type InviteChannel = "line" | "share" | "clipboard" | "cancelled" | "redirect";
 
 export function inviteUrl(code: string): string {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -25,15 +25,37 @@ export function inviteMessage(ownerName: string, url: string): string {
   return `${who}想把每天的紀錄分享給你。點開連結、用 LINE 登入就能接受：\n${url}`;
 }
 
-export async function shareInvite(ownerName: string, code: string): Promise<InviteChannel> {
+export const LINE_INVITE_QUERY = "inviteLine";
+
+export async function shareInvite(
+  ownerName: string,
+  code: string,
+  options: { fromLiffReturn?: boolean } = {},
+): Promise<InviteChannel> {
   const url = inviteUrl(code);
   const text = inviteMessage(ownerName, url);
 
-  // 一定要先 init 過，`isApiAvailable` 才判斷得準，`shareTargetPicker` 也才叫得動。
   const liff = await ensureLiff();
-  if (liff?.isApiAvailable("shareTargetPicker")) {
+  const canPick = Boolean(liff?.isApiAvailable("shareTargetPicker"));
+  const alreadyInLiff = Boolean(liff?.isInClient?.());
+  const returning =
+    options.fromLiffReturn || new URLSearchParams(window.location.search).get(LINE_INVITE_QUERY) === "1";
+
+  if (!canPick && !alreadyInLiff && !returning) {
+    const opened = openLiffInLine({
+      [LINE_INVITE_QUERY]: "1",
+      ...(code ? { code } : {}),
+    });
+    if (opened) return "redirect";
+  }
+
+  if (canPick) {
+    if (!liff!.isLoggedIn()) {
+      liff!.login({ redirectUri: window.location.href });
+      return "redirect";
+    }
     try {
-      const result = await liff.shareTargetPicker([{ type: "text", text }]);
+      const result = await liff!.shareTargetPicker([{ type: "text", text }]);
       return result ? "line" : "cancelled";
     } catch {
       // 使用者未登入或 LINE 版本太舊時往下退回其他管道。
@@ -62,23 +84,41 @@ export async function copyInviteUrl(code: string): Promise<void> {
   await copyText(inviteUrl(code));
 }
 
-export type LinePickResult = "line" | "unavailable" | "cancelled";
+export type LinePickResult = "line" | "unavailable" | "cancelled" | "redirect";
+
+export const LINE_PICK_QUERY = "pickLine";
 
 /**
  * 打開 LINE 原生的好友／群組列表讓使用者選一個聊天室。
  * LINE 基於隱私不會回傳選到誰，選完會送出一則短訊到該聊天室，我們再把顯示名稱記在本機。
+ * 在一般瀏覽器會先跳進 LINE 的 LIFF，進 App 後再自動跳出選人畫面。
  */
-export async function pickLineChat(): Promise<LinePickResult> {
+export async function pickLineChat(
+  displayName = "",
+  options: { fromLiffReturn?: boolean } = {},
+): Promise<LinePickResult> {
   const liff = await ensureLiff();
-  if (!liff?.isApiAvailable("shareTargetPicker")) return "unavailable";
+  const canPick = Boolean(liff?.isApiAvailable("shareTargetPicker"));
+  const alreadyInLiff = Boolean(liff?.isInClient?.());
+  const returningToPick =
+    options.fromLiffReturn || new URLSearchParams(window.location.search).get(LINE_PICK_QUERY) === "1";
 
-  if (!liff.isLoggedIn()) {
-    liff.login({ redirectUri: window.location.href });
-    return "unavailable";
+  if (!canPick) {
+    if (alreadyInLiff || returningToPick) return "unavailable";
+    const opened = openLiffInLine({
+      [LINE_PICK_QUERY]: "1",
+      ...(displayName.trim() ? { label: displayName.trim().slice(0, 30) } : {}),
+    });
+    return opened ? "redirect" : "unavailable";
+  }
+
+  if (!liff!.isLoggedIn()) {
+    liff!.login({ redirectUri: window.location.href });
+    return "redirect";
   }
 
   try {
-    const result = await liff.shareTargetPicker(
+    const result = await liff!.shareTargetPicker(
       [
         {
           type: "text",

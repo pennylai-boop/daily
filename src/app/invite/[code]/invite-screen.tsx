@@ -131,10 +131,6 @@ export function InviteScreen({ code }: { code: string }) {
           )}
 
           {error ? <p className="text-[13px] font-semibold text-alert">{error}</p> : null}
-
-          <p className="text-[13px] leading-relaxed text-ink-subtle">
-            登入後兩邊的身分都是 LINE 驗證過的 userId，不需要交換 email。
-          </p>
         </Card>
       )}
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BlockEditor } from "@/components/entry/block-editor";
 import { FocusList } from "@/components/entry/focus-list";
@@ -9,6 +9,7 @@ import { MoodField, MoodGlyph } from "@/components/entry/mood-picker";
 import { PhotoStrip } from "@/components/entry/photo-strip";
 import { ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "@/components/icons";
 import { RoutineCheckGrid } from "@/components/routines/check-grid";
+import { ShareDayDialog } from "@/components/share-day-dialog";
 import { Button, LinkButton } from "@/components/ui/button";
 import { CollapsibleSection } from "@/components/ui/collapsible";
 import { Chip } from "@/components/ui/surfaces";
@@ -23,7 +24,7 @@ import {
 } from "@/lib/date";
 import { DEFAULT_MOOD, findMood } from "@/lib/moods";
 import { routinesDueOn, writableRoutinesNotDue } from "@/lib/routines";
-import { shareDayImage } from "@/lib/share-image";
+import { prepareDayImage, revokePreparedImage, type PreparedDayImage } from "@/lib/share-image";
 import { hasContent } from "@/lib/stats";
 import { createId } from "@/lib/storage";
 import { createDayEntry, useDailyStore } from "@/lib/store";
@@ -55,15 +56,16 @@ export function EntryScreen({ date }: { date: IsoDate }) {
 type SaveStatus = "idle" | "saving" | "saved" | "full";
 
 function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
-  const { state, saveEntry, deleteEntry, toggleRoutineCheck, markLineTargetUsed } =
-    useDailyStore();
+  const { state, saveEntry, deleteEntry, toggleRoutineCheck } = useDailyStore();
   const [draft, setDraft] = useState<DayEntry>(initial);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [sentGroups, setSentGroups] = useState<string[]>([]);
+  const [shareImage, setShareImage] = useState<PreparedDayImage | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareImageRef = useRef<PreparedDayImage | null>(null);
+  shareImageRef.current = shareImage;
 
   const editable = canEditEntry(date);
   const deletable = canDeleteEntry(date);
@@ -158,25 +160,12 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
     setSharing(true);
     setShareMessage(null);
     try {
-      const { result, previewUrl: nextPreview } = await shareDayImage(
-        draft,
-        state.routines,
-        checkedIds,
-        state.customMoods,
-      );
-      setPreviewUrl(nextPreview);
-      const names = shareTargets.map((target) => target.name);
-      setSentGroups(names);
-      for (const target of shareTargets) markLineTargetUsed(target.id);
-      if (result === "downloaded") {
-        setShareMessage(
-          names.length > 0
-            ? `已下載圖片，傳到 LINE 的「${names.join("、")}」即可。`
-            : "已下載圖片，可以直接傳到 LINE。",
-        );
-      } else if (names.length > 0) {
-        setShareMessage(`分享面板開好了，選 LINE →「${names.join("、")}」送出。`);
-      }
+      const next = await prepareDayImage(draft, state.routines, checkedIds, state.customMoods);
+      setShareImage((current) => {
+        revokePreparedImage(current);
+        return next;
+      });
+      setShareOpen(true);
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         setShareMessage("圖片產生失敗，請再試一次。");
@@ -185,6 +174,8 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       setSharing(false);
     }
   };
+
+  useEffect(() => () => revokePreparedImage(shareImageRef.current), []);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -378,8 +369,11 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
                   setDraft(createDayEntry(date));
                   setDirty(false);
                   setStatus("idle");
-                  setPreviewUrl(null);
-                  setSentGroups([]);
+                  setShareOpen(false);
+                  setShareImage((current) => {
+                    revokePreparedImage(current);
+                    return null;
+                  });
                 }}
               >
                 <TrashIcon className="size-4" />
@@ -397,39 +391,18 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
             {sharing ? "產生圖片中…" : "傳送今天"}
           </Button>
 
-          {previewUrl ? (
-            <div className="space-y-3 rounded-xl border border-line bg-surface px-3 py-3">
-              <p className="text-[13px] font-medium text-ink-muted">傳送預覽</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previewUrl}
-                alt={`${formatFullDate(date)} 的分享圖`}
-                className="mx-auto max-h-[28rem] w-full rounded-lg border border-line object-contain"
-              />
-              {sentGroups.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-[13px] font-medium text-ink">已傳給</p>
-                  <div className="flex flex-wrap gap-2">
-                    {sentGroups.map((name) => (
-                      <Chip key={name} tone="brand">
-                        {name}
-                      </Chip>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[13px] text-ink-muted">
-                  還沒記下群組。可到設定新增，之後這裡會列出已傳的對象。
-                </p>
-              )}
-            </div>
-          ) : null}
-
           {shareMessage ? (
             <p className="text-center text-[13px] text-ink-muted">{shareMessage}</p>
           ) : null}
         </footer>
       ) : null}
+
+      <ShareDayDialog
+        open={shareOpen}
+        image={shareImage}
+        targets={shareTargets}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   );
 }
