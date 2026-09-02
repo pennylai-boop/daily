@@ -31,6 +31,13 @@ ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# 漏帶 build-arg 時會編出一個「值是空字串」的 bundle，部署後才在瀏覽器上發現，
+# 而且要連 public/sw.js 的 VERSION 一起補才救得回來。寧可在這裡就失敗。
+RUN for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY NEXT_PUBLIC_LIFF_ID; do \
+      eval "value=\$$v"; \
+      [ -n "$value" ] || { echo "缺少 build-arg：$v" >&2; exit 1; }; \
+    done
+
 RUN npm run build
 
 FROM base AS runner

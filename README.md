@@ -582,6 +582,16 @@ LINE 有兩個限制決定了做法：**沒有好友清單 API，也不能用 LI
 `getSupabaseBrowser()` 一律回傳 `null`，LINE 登入按鈕點下去只會顯示「這個環境還沒有設定
 Supabase」，帳號區永遠停在「尚未登入」、也不會有頭貼。
 
+這三個現在漏帶會直接讓建置失敗，不會再靜靜編出一包壞掉的 bundle：`cloudbuild.yaml` 不給它們
+預設值（Cloud Build 對不到 substitution 就中止），[`Dockerfile`](Dockerfile) 在 `npm run build`
+之前也會再擋一次，涵蓋直接 `docker build` 的情況。
+
+**`--substitutions` 的分隔符號是逗號，不是空格。** 用空格再整串括起來的話，gcloud 會把後面兩個
+當成第一個的值：`_LIFF_ID` 變成 `2011247351-xxx _SUPABASE_URL=... _SUPABASE_PUBLISHABLE_KEY=...`，
+而 `_SUPABASE_URL`、`_SUPABASE_PUBLISHABLE_KEY` 各自留在預設的空字串。這不會有任何錯誤訊息，
+建置與部署都會成功，要等到有人在正式站按下 LINE 登入才會發現。用
+`gcloud builds describe <build id> --format="json(substitutions)"` 可以看到當次實際收到的值。
+
 補帶 build-arg 重新部署時，[`public/sw.js`](public/sw.js) 的 `VERSION` 也要跟著加一號。
 `/_next/static` 走 cache-first，`activate` 只清掉名字對不上的快取；`VERSION` 沒動的話，
 上一版那批「值是空字串」的 chunk 會一直留在 `daily-assets-<VERSION>` 裡被命中，

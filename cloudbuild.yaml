@@ -17,9 +17,9 @@ steps:
 images:
   - ${_IMAGE}
 
+# _LIFF_ID、_SUPABASE_URL、_SUPABASE_PUBLISHABLE_KEY 刻意不給預設值：
+# Cloud Build 遇到沒有對應值的 substitution 會直接讓建置失敗，這比預設空字串好——
+# 空字串會照樣編完、部署完，直到有人在正式站點下 LINE 登入才發現。
 substitutions:
   _IMAGE: asia-east1-docker.pkg.dev/daily-506100/daily/web:latest
   _SITE_URL: https://daily.introvista.ai
-  _LIFF_ID: ""
-  _SUPABASE_URL: ""
-  _SUPABASE_PUBLISHABLE_KEY: ""
