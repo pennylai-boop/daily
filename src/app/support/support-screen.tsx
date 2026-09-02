@@ -128,7 +128,7 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
     <div className="hide-in-ios-app mx-auto max-w-2xl space-y-6">
       <PageHeading
         title="支持天天 daily"
-        description="天天 daily 沒有付費方案，也不放廣告。如果它陪你寫下了一些日子，可以用任意金額贊助，讓它繼續維護下去。"
+        description="如果它陪你寫下了一些日子，可以用任意金額贊助，讓它繼續維護下去。最下排的廣告可以在設定裡訂閱無廣告版關掉。"
       />
 
       {!paymentReady ? (

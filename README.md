@@ -328,6 +328,16 @@ LINE 登入目前只在 LINE App 內有效（`src/lib/line-auth.ts`），瀏覽�
 填信箱、選一檔就走去 PAYUNi，不必先繞到儲值頁——那一步只是多一次點擊和一次跳頁。
 這條捷徑固定走信用卡與雲端發票；ATM／超商、其他發票形式與兌換碼補接都留在 `/divination/credits`。
 
+### 廣告與無廣告訂閱
+
+全站最下排放 Google AdSense（`NEXT_PUBLIC_ADSENSE_CLIENT` / `NEXT_PUBLIC_ADSENSE_SLOT`）。
+兩個都沒填時仍會留位置與「訂閱無廣告 NT$50／月」連結。iOS App 內不顯示（App Store 規則）。
+
+取消廣告走設定頁的無廣告訂閱：每月 NT$50，必須 LINE 登入，金流與發票與買點數同一條路
+（`product = adfree`）。付款成功後 Notify 把 `adfree_entitlements.expires_at` 往後加 30 天；
+已在期內再訂就從原到期日接著算。`entitlement_applied_at` 避免 Notify 重送時再加一次。
+資料庫變更見 `supabase/migrations/20260902120000_adfree.sql`，部署前要先套到正式專案。
+
 **價格在 `src/lib/divination-credits.ts` 的 `CREDIT_PACKS`，要調整只改那一份。**
 買得越多每點越便宜，「最划算」的標記由 `BEST_VALUE_PACK_ID` 依單價自己算出來，不用手動標。
 金額受 PAYUNi 的支付工具限制：超商代碼上限 20,000、ATM 上限 49,999，
@@ -608,7 +618,7 @@ Supabase」，帳號區永遠停在「尚未登入」、也不會有頭貼。
 gcloud config set project daily-506100
 gcloud builds submit \
   --config cloudbuild.yaml \
-  --substitutions _LIFF_ID=<LIFF ID>,_SUPABASE_URL=<Supabase Project URL>,_SUPABASE_PUBLISHABLE_KEY=<sb_publishable_...>
+  --substitutions _LIFF_ID=<LIFF ID>,_SUPABASE_URL=<Supabase Project URL>,_SUPABASE_PUBLISHABLE_KEY=<sb_publishable_...>,_ADSENSE_CLIENT=<ca-pub-...>,_ADSENSE_SLOT=<slot id>
 gcloud run deploy daily \
   --image asia-east1-docker.pkg.dev/daily-506100/daily/web:latest \
   --region asia-east1 \

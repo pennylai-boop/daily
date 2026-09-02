@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { AccountFooter } from "@/components/account-footer";
+import { AdBanner } from "@/components/ad-banner";
 import {
   CalendarIcon,
   CloseIcon,
@@ -22,7 +23,8 @@ import { PointsBadge } from "@/components/points-badge";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { cn } from "@/components/ui/cn";
 import { resolvePepTalks } from "@/lib/pep-talk";
-import { signOut, syncOnLogin, useDailyStore } from "@/lib/store";
+import { isAdFreeActive } from "@/lib/adfree";
+import { refreshAdFreeStatus, signOut, syncOnLogin, useDailyStore } from "@/lib/store";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { currentUserId } from "@/lib/supabase-sync";
 import type { Profile } from "@/lib/types";
@@ -59,6 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     ready && state.settings.pepTalk.visible && resolvePepTalks(state.settings.pepTalk.quotes).length > 0;
   // 登入後資料會同步到帳號，「只在這台裝置」就不再成立。等 ready 才判斷，免得先閃一次錯的說法。
   const showLocalDataNote = ready && !state.settings.profile.lineUserId;
+  const showAds = !isAdFreeActive(state.settings.adFreeUntil);
 
   const isActive = (href: string) => isActiveHref(pathname, href);
 
@@ -93,6 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user;
       if (!cancelled && user && currentUserId() !== user.id) void syncOnLogin(user);
+      else if (!cancelled && user) void refreshAdFreeStatus();
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
@@ -111,7 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col">
+    <div className="flex min-h-0 w-full flex-1 flex-col" data-ads={showAds ? "on" : "off"}>
       <PepTalkBanner />
 
       <div className="flex w-full min-w-0 flex-1 flex-col lg:flex-row">
@@ -120,8 +124,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={cn(
             "hidden shrink-0 overflow-y-auto border-r border-line bg-surface px-4 py-8 lg:sticky lg:flex lg:w-60 lg:flex-col",
             pepVisible
-              ? "lg:top-[var(--pep-banner-total)] lg:h-[calc(100dvh-var(--pep-banner-total))]"
-              : "lg:top-0 lg:h-dvh",
+              ? "lg:top-[var(--pep-banner-total)] lg:h-[calc(100dvh-var(--pep-banner-total)-var(--ad-bar-h))]"
+              : "lg:top-0 lg:h-[calc(100dvh-var(--ad-bar-h))]",
           )}
         >
           <div className="flex items-center justify-between gap-2">
@@ -185,7 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 px-4 pt-5 pb-[calc(66px+env(safe-area-inset-bottom)+20px)] sm:px-6 lg:px-10 lg:pt-10 lg:pb-14">
+          <main className="min-w-0 flex-1 px-4 pt-5 pb-[calc(66px+var(--ad-bar-h)+env(safe-area-inset-bottom)+20px)] sm:px-6 lg:px-10 lg:pt-10 lg:pb-[calc(var(--ad-bar-h)+3.5rem)]">
             {children}
           </main>
         </div>
@@ -219,6 +223,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </ul>
         </nav>
       </div>
+
+      {showAds ? <AdBanner /> : null}
     </div>
   );
 }

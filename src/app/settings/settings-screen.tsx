@@ -11,6 +11,7 @@ import { Field, TextInput } from "@/components/ui/field";
 import { Segmented, Switch } from "@/components/ui/segmented";
 import { Card, Chip, PageHeading, SectionHeading } from "@/components/ui/surfaces";
 import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account";
+import { AdFreeCard } from "@/components/adfree-card";
 import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
 import { copyInviteUrl, shareInvite } from "@/lib/line-invite";
@@ -33,7 +34,13 @@ const SCOPE_OPTIONS = [
   { value: "mood", label: "只看心情" },
 ] as const satisfies readonly { value: ShareScope; label: string }[];
 
-export function SettingsScreen() {
+export function SettingsScreen({
+  paymentReady,
+  adFreeNotice,
+}: {
+  paymentReady: boolean;
+  adFreeNotice?: string | null;
+}) {
   const store = useDailyStore();
   const { state, ready, replaceState } = store;
   const preference = useThemePreference();
@@ -67,7 +74,7 @@ export function SettingsScreen() {
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeading
         title="設定"
-        description="帳號、分享對象、資料備份；打氣小語與法律條款在頁面最下方。"
+        description="帳號、無廣告訂閱、分享對象、資料備份；打氣小語與法律條款在頁面最下方。"
         action={
           <Segmented
             options={THEME_OPTIONS}
@@ -90,6 +97,8 @@ export function SettingsScreen() {
           onMessage={setMessage}
         />
       </Card>
+
+      <AdFreeCard paymentReady={paymentReady} notice={adFreeNotice} />
 
       <ShareTargetsCard />
 

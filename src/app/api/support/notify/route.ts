@@ -5,13 +5,15 @@
  * 兩種都只寄一次，已寄過的訂單不會重複寄。
  */
 
+import { ADFREE_PRODUCT_NAME } from "@/lib/adfree";
 import { CREDIT_PRODUCT_NAME } from "@/lib/divination-credits";
 import { createInvoiceInput } from "@/lib/invoice";
 import { issueCreditCode } from "@/server/credit-codes";
+import { extendAdFree, getAdFreeUntil } from "@/server/adfree";
 import { isPaid, parsePayuniCallback, payuniConfig } from "@/server/payuni";
 import { issueInvoice } from "@/server/smilepay-invoice";
 import { getOrder, updateOrder, type SponsorOrder } from "@/server/support-orders";
-import { sendCreditCode, sendSponsorThankYou } from "@/server/thank-you-email";
+import { sendAdFreeReceipt, sendCreditCode, sendSponsorThankYou } from "@/server/thank-you-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,11 +59,24 @@ export async function POST(request: Request) {
   if (!paid) return new Response("OK");
 
   // 開票和寄信各自獨立：其中一邊失敗不該讓另一邊也不做，重送 Notify 時也只補做沒完成的那一邊。
-  if (paid.product === "credits") await issueOrderInvoice(paid);
+  if (paid.product === "credits" || paid.product === "adfree") await issueOrderInvoice(paid);
+
+  if (paid.product === "adfree") {
+    const granted = await grantAdFree(paid);
+    if (!granted.ok) {
+      await updateOrder(paid.merTradeNo, { thankYouError: granted.message });
+      return new Response("OK");
+    }
+  }
 
   if (paid.thankYouSentAt) return new Response("OK");
 
-  const mail = paid.product === "credits" ? await deliverCreditCode(paid) : await deliverThankYou(paid);
+  const mail =
+    paid.product === "credits"
+      ? await deliverCreditCode(paid)
+      : paid.product === "adfree"
+        ? await deliverAdFree(paid)
+        : await deliverThankYou(paid);
 
   await updateOrder(paid.merTradeNo, {
     thankYouSentAt: mail.ok ? Date.now() : undefined,
@@ -80,10 +95,15 @@ export async function POST(request: Request) {
 async function issueOrderInvoice(order: SponsorOrder) {
   if (order.invoiceNumber) return;
 
+  const description =
+    order.product === "adfree"
+      ? `${ADFREE_PRODUCT_NAME} 1 個月`
+      : `${CREDIT_PRODUCT_NAME} ${order.credits} 點`;
+
   const result = await issueInvoice({
     merTradeNo: order.merTradeNo,
     amount: order.amount,
-    description: `${CREDIT_PRODUCT_NAME} ${order.credits} 點`,
+    description,
     email: order.email,
     invoice: order.invoice ?? createInvoiceInput(),
   });
@@ -98,6 +118,33 @@ async function issueOrderInvoice(order: SponsorOrder) {
     invoiceNumber: result.invoiceNumber,
     invoiceIssuedAt: Date.now(),
     invoiceError: undefined,
+  });
+}
+
+async function grantAdFree(order: SponsorOrder): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (order.entitlementAppliedAt) return { ok: true };
+  if (!order.userId) {
+    return { ok: false, message: `訂單 ${order.merTradeNo} 沒有綁定使用者，無法開啟無廣告。` };
+  }
+  const until = await extendAdFree(order.userId, order.email);
+  if (!until) {
+    return { ok: false, message: `訂單 ${order.merTradeNo} 延長無廣告效期失敗。` };
+  }
+  await updateOrder(order.merTradeNo, { entitlementAppliedAt: Date.now() });
+  return { ok: true };
+}
+
+async function deliverAdFree(order: SponsorOrder) {
+  if (!order.userId) {
+    return { ok: false as const, message: `訂單 ${order.merTradeNo} 沒有綁定使用者。` };
+  }
+  const until = await getAdFreeUntil(order.userId);
+  return sendAdFreeReceipt({
+    email: order.email,
+    name: order.name,
+    amount: order.amount,
+    merTradeNo: order.merTradeNo,
+    until,
   });
 }
 

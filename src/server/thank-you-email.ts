@@ -4,6 +4,7 @@
  * 有設定 `RESEND_API_KEY` 時用 Resend 寄出；未設定時只記 log。
  */
 
+import { ADFREE_PRODUCT_NAME, formatAdFreeUntil } from "@/lib/adfree";
 import { formatRedeemCode } from "@/lib/divination-credits";
 import { formatAmount } from "@/lib/support";
 
@@ -73,6 +74,34 @@ export async function sendSponsorThankYou(params: {
       "",
       `謝謝你贊助天天 daily ${formatAmount(params.amount)}。`,
       "這份心意會變成繼續維護的動力，讓更多人能安靜地寫下自己的日子。",
+      "",
+      `訂單編號：${params.merTradeNo}`,
+      "",
+      "—— 天天 daily",
+    ].join("\n"),
+  });
+}
+
+export async function sendAdFreeReceipt(params: {
+  email: string;
+  name: string;
+  amount: number;
+  merTradeNo: string;
+  until: string | null;
+}): Promise<MailResult> {
+  const greeting = params.name.trim() || "朋友";
+  const untilLine = params.until
+    ? `這次訂閱有效至 ${formatAdFreeUntil(params.until)}。到期前再付一次就會往後延 30 天。`
+    : "付款已確認，登入同一支 LINE 後廣告就會關掉。";
+  return sendMail({
+    to: params.email,
+    subject: `天天 daily ${ADFREE_PRODUCT_NAME}已生效`,
+    text: [
+      `${greeting}，你好：`,
+      "",
+      `謝謝你訂閱天天 daily 無廣告版（${formatAmount(params.amount)}／月）。`,
+      untilLine,
+      "發票會另寄到這個信箱（若開立成功）。",
       "",
       `訂單編號：${params.merTradeNo}`,
       "",

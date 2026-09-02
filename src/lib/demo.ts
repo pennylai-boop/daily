@@ -302,6 +302,7 @@ function buildDemoSettings(): AppSettings {
       },
     ],
     pepTalk: { visible: true, quotes: null },
+    adFreeUntil: null,
   };
 }
 

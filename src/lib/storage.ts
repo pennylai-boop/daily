@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   line: { targets: [] },
   recipients: [],
   pepTalk: { visible: true, quotes: null },
+  adFreeUntil: null,
 };
 
 export const EMPTY_STATE: DailyState = {
@@ -255,6 +256,7 @@ function mergeSettings(value: AppSettings | undefined): AppSettings {
         ? pep.quotes.map((q) => (typeof q === "string" ? q.trim() : "")).filter(Boolean)
         : null,
     },
+    adFreeUntil: typeof value.adFreeUntil === "string" ? value.adFreeUntil : null,
   };
 }
 

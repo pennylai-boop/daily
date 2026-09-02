@@ -13,8 +13,8 @@ import { normalizeInvoice, parseInvoice, type InvoiceInput } from "@/lib/invoice
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import type { SponsorInput, SponsorMethod } from "@/lib/support";
 
-/** sponsor＝贊助；credits＝購買卜卦點數，付款成功後發兌換碼而不是感謝信。 */
-export type OrderProduct = "sponsor" | "credits";
+/** sponsor＝贊助；credits＝購買卜卦點數；adfree＝無廣告訂閱。 */
+export type OrderProduct = "sponsor" | "credits" | "adfree";
 
 export interface SponsorOrder {
   merTradeNo: string;
@@ -30,6 +30,10 @@ export interface SponsorOrder {
   credits: number;
   /** 買受人要的發票形式；贊助訂單不開發票，為 null。 */
   invoice: InvoiceInput | null;
+  /** 下單時的登入使用者；無廣告訂閱一定有值。 */
+  userId?: string;
+  /** 無廣告訂閱已把效期加上去的時間；重送 Notify 時不要再加 30 天。 */
+  entitlementAppliedAt?: number;
   tradeNo?: string;
   paidAt?: number;
   /** 贊助是感謝信，點數是兌換碼信，兩者共用這組欄位。 */
@@ -52,6 +56,8 @@ type SponsorOrderRow = {
   product: OrderProduct;
   credits: number;
   invoice: unknown;
+  user_id: string | null;
+  entitlement_applied_at: string | null;
   invoice_number: string | null;
   invoice_issued_at: string | null;
   invoice_error: string | null;
@@ -72,9 +78,13 @@ function fromRow(row: SponsorOrderRow): SponsorOrder {
     message: row.message,
     createdAt: new Date(row.created_at).getTime(),
     status: row.status,
-    product: row.product === "credits" ? "credits" : "sponsor",
+    product: row.product === "credits" || row.product === "adfree" ? row.product : "sponsor",
     credits: row.credits ?? 0,
     invoice: row.invoice ? parseInvoice(row.invoice) : null,
+    userId: row.user_id ?? undefined,
+    entitlementAppliedAt: row.entitlement_applied_at
+      ? new Date(row.entitlement_applied_at).getTime()
+      : undefined,
     invoiceNumber: row.invoice_number ?? undefined,
     invoiceIssuedAt: row.invoice_issued_at ? new Date(row.invoice_issued_at).getTime() : undefined,
     invoiceError: row.invoice_error ?? undefined,
@@ -92,6 +102,7 @@ export async function createOrder(
     product: OrderProduct;
     credits: number;
     invoice?: InvoiceInput | null;
+    userId?: string | null;
   } = { product: "sponsor", credits: 0 },
 ): Promise<SponsorOrder> {
   const db = getSupabaseAdmin();
@@ -109,6 +120,7 @@ export async function createOrder(
       product: product.product,
       credits: product.credits,
       invoice: product.invoice ? normalizeInvoice(product.invoice) : null,
+      user_id: product.userId ?? null,
     })
     .select()
     .single();
@@ -163,6 +175,11 @@ export async function updateOrder(
       : null;
   }
   if (has("invoiceError")) update.invoice_error = patch.invoiceError ?? null;
+  if (has("entitlementAppliedAt")) {
+    update.entitlement_applied_at = patch.entitlementAppliedAt
+      ? new Date(patch.entitlementAppliedAt).toISOString()
+      : null;
+  }
 
   const { data, error } = await db
     .from("sponsor_orders")

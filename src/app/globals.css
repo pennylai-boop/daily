@@ -32,6 +32,20 @@
   /* 打氣小語列的高度；側欄要靠它算出自己的可視高度（+1px 是底線）。 */
   --pep-banner-h: 2.5rem;
   --pep-banner-total: calc(var(--pep-banner-h) + 1px);
+  /* 無廣告訂閱生效、或 iOS App 內，廣告列高度為 0。 */
+  --ad-bar-h: 0px;
+  --ad-bar-offset: 0px;
+}
+
+[data-ads="on"] {
+  --ad-bar-h: 5.75rem;
+  --ad-bar-offset: calc(66px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 64rem) {
+  [data-ads="on"] {
+    --ad-bar-offset: 0px;
+  }
 }
 
 /* 深色模式沿用同一組橘藍，只把灰階換成深色並提亮強調色以維持對比。 */
@@ -216,6 +230,12 @@ body {
    */
   [data-platform="ios"] .hide-in-ios-app {
     display: none !important;
+  }
+
+  /* App 內不放網頁廣告，也不留廣告列的高度。 */
+  [data-platform="ios"] {
+    --ad-bar-h: 0px;
+    --ad-bar-offset: 0px;
   }
 
   .only-in-ios-app {

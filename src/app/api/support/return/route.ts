@@ -31,12 +31,18 @@ export async function POST(request: Request) {
     return NextResponse.redirect(target, 303);
   }
 
-  // 點數付成功就回卜卦頁；沒付成功（取消、失敗）仍走 /support/result 說明原因。
+  // 點數付成功就回卜卦頁；無廣告訂閱回設定頁。沒付成功仍走 /support/result 說明原因。
   if (isPaid(callback)) {
     const order = await getOrder(callback.merTradeNo);
     if (order?.product === "credits") {
       const back = new URL("/divination", origin);
       back.searchParams.set("paid", callback.merTradeNo);
+      return NextResponse.redirect(back, 303);
+    }
+    if (order?.product === "adfree") {
+      const back = new URL("/settings", origin);
+      back.searchParams.set("adfree", "ok");
+      back.hash = "adfree";
       return NextResponse.redirect(back, 303);
     }
   }

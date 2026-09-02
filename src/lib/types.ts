@@ -230,6 +230,11 @@ export interface AppSettings {
   line: LineSettings;
   recipients: ShareRecipient[];
   pepTalk: PepTalkSettings;
+  /**
+   * 無廣告訂閱到期時間（ISO）。真正的來源在伺服器，這裡只是登入後抄下來，
+   * 避免每次換頁都先閃出廣告列。
+   */
+  adFreeUntil: string | null;
 }
 
 /** 卜過的卦。免費額度用完之後還看得到上一次問的是什麼。 */

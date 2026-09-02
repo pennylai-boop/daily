@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
+import { fetchAdFreeUntil } from "./adfree-checkout";
 import { createCustomMoodId } from "./moods";
 import { profileFromSession } from "./line-auth";
 import { getSupabaseBrowser } from "./supabase-browser";
@@ -278,8 +279,37 @@ export function signOut(): void {
       ...current.settings,
       profile: { name: "", lineUserId: "", avatarUrl: null },
       recipients: [],
+      adFreeUntil: null,
     },
   }));
+}
+
+export function setAdFreeUntil(until: string | null): void {
+  commit((current) => ({
+    ...current,
+    settings: { ...current.settings, adFreeUntil: until },
+  }));
+}
+
+/** 用目前的 session 向伺服器問一次無廣告效期。沒登入就清掉本機快取。 */
+export async function refreshAdFreeStatus(): Promise<void> {
+  const supabase = getSupabaseBrowser();
+  if (!supabase) {
+    setAdFreeUntil(null);
+    return;
+  }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    setAdFreeUntil(null);
+    return;
+  }
+  try {
+    setAdFreeUntil(await fetchAdFreeUntil(session.access_token));
+  } catch {
+    // 暫時問不到就沿用本機快取，下次再試。
+  }
 }
 
 function updateLineTargets(
@@ -560,7 +590,7 @@ export async function syncOnLogin(user: {
   commit(() => merged);
 
   await pushWholeState(merged, user.id);
-  await Promise.all([refreshRecipients(), refreshSharedJournals()]);
+  await Promise.all([refreshRecipients(), refreshSharedJournals(), refreshAdFreeStatus()]);
 }
 
 /**
@@ -651,6 +681,8 @@ export interface DailyStore {
   toggleRoutineCheck: typeof toggleRoutineCheck;
   updateProfile: typeof updateProfile;
   signOut: typeof signOut;
+  setAdFreeUntil: typeof setAdFreeUntil;
+  refreshAdFreeStatus: typeof refreshAdFreeStatus;
   addLineTarget: typeof addLineTarget;
   removeLineTarget: typeof removeLineTarget;
   markLineTargetUsed: typeof markLineTargetUsed;
@@ -692,6 +724,8 @@ export function useDailyStore(): DailyStore {
     toggleRoutineCheck,
     updateProfile,
     signOut,
+    setAdFreeUntil,
+    refreshAdFreeStatus,
     addLineTarget,
     removeLineTarget,
     markLineTargetUsed,
