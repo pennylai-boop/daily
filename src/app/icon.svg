@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- 與側欄品牌標記相同：橘底圓角方塊＋白色實心太陽 -->
   <rect width="64" height="64" rx="14" fill="#e86e2c"/>
   <g
     fill="none"

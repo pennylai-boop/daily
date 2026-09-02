@@ -18,6 +18,7 @@ import {
   MenuIcon,
   RepeatIcon,
   SparkIcon,
+  SunIcon,
   UsersIcon,
 } from "@/components/icons";
 import { PepTalkBanner } from "@/components/pep-talk-banner";
@@ -370,8 +371,12 @@ function LocalDataNote({ className }: { className?: string }) {
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/icon.svg" alt="" className="size-9" />
+      <span
+        aria-hidden
+        className="flex size-9 items-center justify-center rounded-xl bg-brand"
+      >
+        <SunIcon className="size-[22px] text-white" strokeWidth={2} />
+      </span>
       <span className="flex flex-col leading-tight">
         <span className="text-[15px] font-semibold tracking-tight text-ink">天天</span>
         {!compact ? (

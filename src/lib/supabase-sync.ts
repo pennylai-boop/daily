@@ -383,6 +383,23 @@ export async function deleteCustomMoodRemote(id: string): Promise<void> {
   if (error) console.error("[supabase-sync] deleteCustomMoodRemote", error);
 }
 
+/** 只拉常傳名單。從 LINE 回到網頁時用來把另一邊剛存的對象補進來。 */
+export async function pullLineTargets(): Promise<LineShareTarget[] | null> {
+  const supabase = getSupabaseBrowser();
+  const userId = sessionUserId;
+  if (!supabase || !userId) return null;
+  const { data, error } = await supabase.from("line_share_targets").select("*").eq("user_id", userId);
+  if (error) {
+    console.error("[supabase-sync] pullLineTargets", error);
+    return null;
+  }
+  return ((data ?? []) as LineTargetRow[]).map((row) => ({
+    id: row.id,
+    name: row.name,
+    lastUsedAt: row.last_used_at,
+  }));
+}
+
 export async function pushLineTarget(target: LineShareTarget): Promise<void> {
   const supabase = getSupabaseBrowser();
   const userId = sessionUserId;

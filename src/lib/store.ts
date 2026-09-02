@@ -19,6 +19,7 @@ import {
   fetchRecipients,
   hasSession,
   mergeStates,
+  pullLineTargets,
   pullRemoteState,
   pushCustomMood,
   pushEntry,
@@ -327,17 +328,43 @@ function updateLineTargets(
   }));
 }
 
-/** 同名的對象不重複建立，直接沿用既有那一筆。 */
-export function addLineTarget(name: string): void {
+/** 同名的對象不重複建立，直接沿用既有那一筆。寫進本機後再等雲端，跳去 LINE 前才不會弄丟。 */
+export async function addLineTarget(name: string): Promise<LineShareTarget | null> {
   const trimmed = name.trim().slice(0, 30);
-  if (!trimmed) return;
+  if (!trimmed) return null;
 
   const existing = cache ?? loadState();
-  if (existing.settings.line.targets.some((target) => target.name === trimmed)) return;
+  const found = existing.settings.line.targets.find((target) => target.name === trimmed);
+  if (found) {
+    if (hasSession()) await pushLineTarget(found);
+    return found;
+  }
 
   const target: LineShareTarget = { id: createId(), name: trimmed, lastUsedAt: null };
   updateLineTargets((targets) => [...targets, target]);
-  if (hasSession()) void pushLineTarget(target);
+  if (hasSession()) await pushLineTarget(target);
+  return target;
+}
+
+/** 從雲端補常傳名單，給從 LINE 回到網頁版時用。問不到就不動本機。 */
+export async function refreshLineTargets(): Promise<void> {
+  if (!hasSession()) return;
+  const remote = await pullLineTargets();
+  if (!remote) return;
+
+  commit((current) => {
+    const byName = new Map(current.settings.line.targets.map((target) => [target.name, target]));
+    for (const target of remote) {
+      const local = byName.get(target.name);
+      if (!local || (target.lastUsedAt ?? "") > (local.lastUsedAt ?? "")) {
+        byName.set(target.name, target);
+      }
+    }
+    return {
+      ...current,
+      settings: { ...current.settings, line: { targets: [...byName.values()] } },
+    };
+  });
 }
 
 export function removeLineTarget(id: string): void {
@@ -755,6 +782,7 @@ export interface DailyStore {
   setAdFreeUntil: typeof setAdFreeUntil;
   refreshAdFreeStatus: typeof refreshAdFreeStatus;
   addLineTarget: typeof addLineTarget;
+  refreshLineTargets: typeof refreshLineTargets;
   removeLineTarget: typeof removeLineTarget;
   markLineTargetUsed: typeof markLineTargetUsed;
   setPepTalkVisible: typeof setPepTalkVisible;
@@ -801,6 +829,7 @@ export function useDailyStore(): DailyStore {
     setAdFreeUntil,
     refreshAdFreeStatus,
     addLineTarget,
+    refreshLineTargets,
     removeLineTarget,
     markLineTargetUsed,
     setPepTalkVisible,

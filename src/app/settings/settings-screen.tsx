@@ -25,6 +25,7 @@ import { hasContent } from "@/lib/stats";
 import {
   addSharedPepTalk,
   refreshRecipients,
+  refreshLineTargets,
   refreshSharedPepTalks,
   removeSharedPepTalk,
   createDayEntry,
@@ -398,8 +399,9 @@ function LegalLinks() {
 /**
  * 常傳的 LINE 群組／對象清單。
  *
- * 按新增會打開 LINE 的好友與群組列表。選完後本機只記顯示名稱，
+ * 按新增會打開 LINE 的好友、群組與聊天室列表。選完後本機只記顯示名稱，
  * 因為 LINE 基於隱私不會把選到的聊天室身分回給網頁。
+ * 跳去 LINE 之前先寫進本機與雲端，回到網頁版才不會不見。
  */
 function clearLineInviteQuery() {
   if (typeof window === "undefined") return;
@@ -438,33 +440,37 @@ function ShareTargetsCard() {
     setPicking(true);
     setNote(null);
     const label = (presetName ?? name).trim().slice(0, 30);
-    const result = await pickLineChat(label, { fromLiffReturn });
-    setPicking(false);
-
-    if (result === "redirect") {
-      setNote("正在打開 LINE，選好好友或群組後會自動加進來。");
-      return;
-    }
-    clearLinePickQuery();
-    if (result === "cancelled") return;
-    if (result === "unavailable") {
-      setNote("打不開 LINE 的好友列表。請確認已安裝 LINE，或到 LINE Developers 把這個 LIFF 的「分享對象選擇」打開。");
-      return;
-    }
-
     const used = new Set(targets.map((target) => target.name));
     let next = label;
     if (!next) {
       let index = 1;
       while (used.has(`群組 ${index}`)) index += 1;
       next = `群組 ${index}`;
-    } else if (used.has(next)) {
-      setNote("這個名稱已經有了，請換一個顯示名稱再選一次。");
+    }
+
+    // 先存再打開 LINE：網頁版跳走之後 localStorage 已經有這筆，回來才看得到。
+    await store.addLineTarget(next);
+    setName("");
+
+    const result = await pickLineChat(next, { fromLiffReturn });
+    setPicking(false);
+
+    if (result === "redirect") {
+      setNote(`已記住「${next}」，正在打開 LINE。可選好友、群組或聊天室。`);
       return;
     }
-    store.addLineTarget(next);
-    setName("");
-    setNote(`已加入「${next}」。可再按新增繼續從 LINE 列表選。`);
+    clearLinePickQuery();
+    if (result === "cancelled") {
+      setNote(`「${next}」已在名單裡。可再到 LINE 選一次群組或好友。`);
+      return;
+    }
+    if (result === "unavailable") {
+      setNote("打不開 LINE 的列表。請確認已安裝 LINE，或到 LINE Developers 把這個 LIFF 的「分享對象選擇」打開。");
+      return;
+    }
+
+    await store.addLineTarget(next);
+    setNote(`已加入「${next}」。可再按新增繼續選好友或群組。`);
   };
 
   useEffect(() => {
@@ -477,6 +483,22 @@ function ShareTargetsCard() {
     void addFromLine(label, true);
     // 只在從 LIFF 深連結回來時跑一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState === "hidden") return;
+      void refreshLineTargets();
+    };
+    sync();
+    window.addEventListener("visibilitychange", sync);
+    window.addEventListener("pageshow", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      window.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("pageshow", sync);
+      window.removeEventListener("focus", sync);
+    };
   }, []);
 
   const sendToday = async () => {
@@ -512,7 +534,7 @@ function ShareTargetsCard() {
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="常傳的 LINE 對象"
-        description="按新增會打開 LINE 的好友與群組列表。選取後可填顯示名稱方便辨認；傳送今天會先預覽，再下載或發送到這些對象。"
+        description="按新增會打開 LINE，可選好友、群組或聊天室。顯示名稱可先填方便辨認；名單會自動存下來，回到網頁版也還在。傳送今天會先預覽，再下載或發送。"
       />
 
       <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -521,7 +543,7 @@ function ShareTargetsCard() {
           value={name}
           maxLength={30}
           aria-label="顯示名稱"
-          placeholder="選填顯示名稱，例如：家人群"
+          placeholder="選填顯示名稱，例如：家人群、工作群"
           className="min-w-48 flex-1"
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {

@@ -125,7 +125,8 @@ export async function pickLineChat(
           text: "已把這個聊天室加入天天 daily 的常傳名單。之後日記頁按「傳送今天」就會傳到這裡。",
         },
       ],
-      { isMultiple: false },
+      // false 只會出現好友；true 才看得到群組與聊天室。
+      { isMultiple: true },
     );
     return result ? "line" : "cancelled";
   } catch {

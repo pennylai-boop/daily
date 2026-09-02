@@ -380,7 +380,11 @@ function drawPolaroid(
   drawCover(ctx, image, x + frame, y + frame, width - frame * 2, height - frame, 2);
 }
 
-const BRAND_ICON_SRC = "/icon.svg";
+const BRAND_ICON_SRC =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#e86e2c"/><g fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(32 32) scale(1.63) translate(-12 -12)"><circle cx="12" cy="12" r="4.1" fill="#ffffff"/><path d="M12 2.2v2.1M12 19.7v2.1M2.2 12h2.1M19.7 12h2.1M5.1 5.1l1.5 1.5M17.4 17.4l1.5 1.5M18.9 5.1l-1.5 1.5M6.6 17.4l-1.5 1.5"/></g></svg>`,
+  );
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
