@@ -333,10 +333,12 @@ LINE 登入目前只在 LINE App 內有效（`src/lib/line-auth.ts`），瀏覽�
 全站最下排放 Google AdSense（`NEXT_PUBLIC_ADSENSE_CLIENT` / `NEXT_PUBLIC_ADSENSE_SLOT`）。
 兩個都沒填時仍會留位置與「訂閱無廣告 NT$50／月」連結。iOS App 內不顯示（App Store 規則）。
 
-取消廣告走設定頁的無廣告訂閱：每月 NT$50，必須 LINE 登入，金流與發票與買點數同一條路
-（`product = adfree`）。付款成功後 Notify 把 `adfree_entitlements.expires_at` 往後加 30 天；
-已在期內再訂就從原到期日接著算。`entitlement_applied_at` 避免 Notify 重送時再加一次。
-資料庫變更見 `supabase/migrations/20260902120000_adfree.sql`，部署前要先套到正式專案。
+廣告列的「訂閱無廣告」會進 `/adfree`：已登入就直接 form post 到 PAYUNi 續期收款頁
+（信用卡每月自動扣款）。必須 LINE 登入。每期授權成功後 Notify 把
+`adfree_entitlements.expires_at` 往後加 30 天，並用 SmilePay 開發票。
+商店需在 PAYUNi 後台開通續期收款。資料庫變更見
+`supabase/migrations/20260902120000_adfree.sql` 與
+`supabase/migrations/20260902140000_adfree_period.sql`，部署前要先套到正式專案。
 
 **價格在 `src/lib/divination-credits.ts` 的 `CREDIT_PACKS`，要調整只改那一份。**
 買得越多每點越便宜，「最划算」的標記由 `BEST_VALUE_PACK_ID` 依單價自己算出來，不用手動標。
@@ -539,7 +541,9 @@ await supabase.auth.admin.customProviders.createProvider({
   Supabase；這個 URL 是 Auth 伺服器打的，必須是公開的正式站，不能填 localhost。
 - **Site URL 必須是正式站。** Dashboard → Authentication → URL Configuration：
   Site URL = `https://daily.introvista.ai`，Redirect URLs 加上
-  `https://daily.introvista.ai/**` 與本機用的 `http://localhost:3000/**`。
+  `https://daily.introvista.ai`、`https://daily.introvista.ai/**`、
+  `https://daily.introvista.ai/auth/callback`，以及本機
+  `http://localhost:3000/**`、`http://localhost:3000/auth/callback`。
   Site URL 若還停在 `http://localhost:3000`，正式站登入走完也會被退回本機
   （本機沒開 server 就是「localhost 拒絕連線」）。
 - **`bot_prompt=aggressive` 讓登入順便加好友。** 沒成為好友就推不了訊息。推到群組則是把官方帳號邀進群，

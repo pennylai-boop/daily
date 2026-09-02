@@ -19,7 +19,11 @@ import type {
   TemplateId,
   ThemePreference,
   TimerDefaults,
+  FocusSession,
+  FocusState,
+  SharedPepTalk,
 } from "./types";
+import { DEFAULT_FOCUS } from "./types";
 
 export const STORE_KEY = "daily.store.v1";
 export const THEME_KEY = "daily.theme";
@@ -35,8 +39,10 @@ export const THEME_KEY = "daily.theme";
  * 10：卜卦的免費額度、點數與歷史紀錄。
  * 11：定期事項加上 updatedAt，登入同步到 Supabase 時用來判斷本機／雲端哪一份較新。
  * 12：卜卦紀錄可以自己加附註。
+ * 13：專心模式（番茄鐘與已完成時長）。
+ * 14：打氣小語改為系統預設＋全站共享新增。
  */
-export const STORE_VERSION = 12;
+export const STORE_VERSION = 14;
 
 /** 卜卦：三個月一輪的免費額度，還沒卜過的人第一次就是免費。 */
 export const EMPTY_DIVINATION: DivinationState = {
@@ -68,6 +74,8 @@ export const EMPTY_STATE: DailyState = {
   settings: DEFAULT_SETTINGS,
   sharedWithMe: [],
   divination: EMPTY_DIVINATION,
+  focus: DEFAULT_FOCUS,
+  sharedPepTalks: [],
 };
 
 /** 首次使用時帶入預設的定期事項，讓使用者一進來就能開始書寫。 */
@@ -142,6 +150,65 @@ export function normalizeState(value: unknown): DailyState {
       ? candidate.sharedWithMe.map(normalizeJournal)
       : [],
     divination: normalizeDivination(candidate.divination),
+    focus: normalizeFocus(candidate.focus),
+    sharedPepTalks: Array.isArray(candidate.sharedPepTalks)
+      ? candidate.sharedPepTalks
+          .map(normalizeSharedPepTalk)
+          .filter((item): item is SharedPepTalk => item !== null)
+      : [],
+  };
+}
+
+function normalizeSharedPepTalk(value: unknown): SharedPepTalk | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.id !== "string" || typeof value.text !== "string") return null;
+  const text = value.text.trim();
+  if (!text) return null;
+  return {
+    id: value.id,
+    text,
+    userId: typeof value.userId === "string" ? value.userId : "",
+    authorName: typeof value.authorName === "string" ? value.authorName : "",
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : "",
+  };
+}
+
+const FOCUS_SESSION_LIMIT = 200;
+
+function normalizeFocus(value: unknown): FocusState {
+  if (!isRecord(value)) return { ...DEFAULT_FOCUS };
+  const minutes = Math.max(1, Math.min(180, Math.trunc(Number(value.pomodoroMinutes) || 25)));
+  const runningMinutes = Math.max(
+    1,
+    Math.min(180, Math.trunc(Number(value.runningPlannedMinutes) || minutes)),
+  );
+  const sessions = Array.isArray(value.sessions)
+    ? value.sessions
+        .map(normalizeFocusSession)
+        .filter((session): session is FocusSession => session !== null)
+        .slice(-FOCUS_SESSION_LIMIT)
+    : [];
+
+  return {
+    pomodoroMinutes: minutes,
+    runningStartedAt: typeof value.runningStartedAt === "string" ? value.runningStartedAt : null,
+    runningPlannedMinutes: runningMinutes,
+    sessions,
+  };
+}
+
+function normalizeFocusSession(value: unknown): FocusSession | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.id !== "string" || typeof value.date !== "string") return null;
+  if (typeof value.startedAt !== "string" || typeof value.endedAt !== "string") return null;
+  return {
+    id: value.id,
+    date: value.date,
+    plannedMinutes: Math.max(1, Math.trunc(Number(value.plannedMinutes) || 1)),
+    elapsedSeconds: Math.max(0, Math.trunc(Number(value.elapsedSeconds) || 0)),
+    startedAt: value.startedAt,
+    endedAt: value.endedAt,
+    completed: Boolean(value.completed),
   };
 }
 

@@ -5,10 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { AccountFooter } from "@/components/account-footer";
+import { AuthLocalhostBounce } from "@/components/auth-localhost-bounce";
 import { AdBanner } from "@/components/ad-banner";
+import { FocusLock } from "@/components/focus-lock";
 import {
   CalendarIcon,
   CloseIcon,
+  FocusIcon,
   GearIcon,
   HeartIcon,
   HexagramIcon,
@@ -24,25 +27,25 @@ import { ProfileAvatar } from "@/components/profile-avatar";
 import { cn } from "@/components/ui/cn";
 import { resolvePepTalks } from "@/lib/pep-talk";
 import { isAdFreeActive } from "@/lib/adfree";
-import { refreshAdFreeStatus, signOut, syncOnLogin, useDailyStore } from "@/lib/store";
+import { refreshAdFreeStatus, refreshSharedPepTalks, signOut, syncOnLogin, useDailyStore } from "@/lib/store";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { currentUserId } from "@/lib/supabase-sync";
 import type { Profile } from "@/lib/types";
 
 /**
- * primary 的項目在手機版顯示為底部分頁，其餘收進手機版頂端列。
+ * primary 的項目在手機版顯示為底部分頁，其餘收進左側抽屜。
  * hideInIosApp 的項目在 iOS App 內會被 CSS 隱藏（App Store 規則，見 README 的「包成 App」）。
  */
 const NAV_ITEMS = [
-  { href: "/", label: "日曆", Icon: CalendarIcon, primary: true, hideInIosApp: false },
-  { href: "/routines", label: "定期目標", Icon: RepeatIcon, primary: true, hideInIosApp: false },
-  { href: "/insights", label: "回顧", Icon: SparkIcon, primary: true, hideInIosApp: false },
-  { href: "/divination", label: "卜卦", Icon: HexagramIcon, primary: true, hideInIosApp: false },
-  // 手機從左上角選單進入，底部分頁留給每天會用到的四項。
-  { href: "/shared", label: "被分享紀錄", Icon: UsersIcon, primary: false, hideInIosApp: false },
+  { href: "/", label: "日曆", shortLabel: "日曆", Icon: CalendarIcon, primary: true, hideInIosApp: false },
+  { href: "/routines", label: "定期目標", shortLabel: "定期目標", Icon: RepeatIcon, primary: true, hideInIosApp: false },
+  { href: "/focus", label: "專心模式", shortLabel: "專心", Icon: FocusIcon, primary: true, hideInIosApp: false },
+  { href: "/insights", label: "回顧", shortLabel: "回顧", Icon: SparkIcon, primary: true, hideInIosApp: false },
+  { href: "/shared", label: "被分享紀錄", shortLabel: "被分享", Icon: UsersIcon, primary: true, hideInIosApp: false },
+  { href: "/divination", label: "卜卦", shortLabel: "卜卦", Icon: HexagramIcon, primary: false, hideInIosApp: false },
   // 手機另有右上角橘色愛心；桌機側欄仍列出。iOS App 內隱藏（App Store 規則）。
-  { href: "/support", label: "支持", Icon: HeartIcon, primary: false, hideInIosApp: true },
-  { href: "/settings", label: "設定", Icon: GearIcon, primary: false, hideInIosApp: false },
+  { href: "/support", label: "支持", shortLabel: "支持", Icon: HeartIcon, primary: false, hideInIosApp: true },
+  { href: "/settings", label: "設定", shortLabel: "設定", Icon: GearIcon, primary: false, hideInIosApp: false },
 ] as const;
 
 const TAB_ITEMS = NAV_ITEMS.filter((item) => item.primary);
@@ -58,7 +61,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPathname, setMenuPathname] = useState(pathname);
   const pepVisible =
-    ready && state.settings.pepTalk.visible && resolvePepTalks(state.settings.pepTalk.quotes).length > 0;
+    ready &&
+    state.settings.pepTalk.visible &&
+    resolvePepTalks(state.sharedPepTalks).length > 0;
   // 登入後資料會同步到帳號，「只在這台裝置」就不再成立。等 ready 才判斷，免得先閃一次錯的說法。
   const showLocalDataNote = ready && !state.settings.profile.lineUserId;
   const showAds = !isAdFreeActive(state.settings.adFreeUntil);
@@ -93,10 +98,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     let cancelled = false;
 
+    void refreshSharedPepTalks();
+
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user;
       if (!cancelled && user && currentUserId() !== user.id) void syncOnLogin(user);
-      else if (!cancelled && user) void refreshAdFreeStatus();
+      else if (!cancelled && user) {
+        void refreshAdFreeStatus();
+        void refreshSharedPepTalks();
+      }
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
@@ -116,6 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col" data-ads={showAds ? "on" : "off"}>
+      <AuthLocalhostBounce />
       <PepTalkBanner />
 
       <div className="flex w-full min-w-0 flex-1 flex-col lg:flex-row">
@@ -214,7 +225,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     <item.Icon className="size-6 shrink-0" strokeWidth={active ? 2.2 : 1.8} />
                     <span className="w-full truncate text-center text-[11px] leading-none font-medium">
-                      {item.label}
+                      {item.shortLabel}
                     </span>
                   </Link>
                 </li>
@@ -225,6 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {showAds ? <AdBanner /> : null}
+      <FocusLock />
     </div>
   );
 }

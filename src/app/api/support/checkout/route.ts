@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 
 import { createSponsorInput, hasErrors, validateSponsor, type SponsorInput } from "@/lib/support";
 import { buildUppRequest, createMerTradeNo, payuniConfig } from "@/server/payuni";
+import { optionalUser } from "@/server/sharing";
 import { createOrder } from "@/server/support-orders";
 
 export const runtime = "nodejs";
@@ -37,8 +38,13 @@ export async function POST(request: Request) {
   }
 
   const merTradeNo = createMerTradeNo();
+  const user = await optionalUser(request);
   try {
-    await createOrder(merTradeNo, input);
+    await createOrder(merTradeNo, input, {
+      product: "sponsor",
+      credits: 0,
+      userId: user?.userId,
+    });
   } catch (e) {
     console.error("[support/checkout] 建立訂單失敗：", e);
     return NextResponse.json({ error: "暫時無法建立贊助訂單，請稍後再試。" }, { status: 500 });

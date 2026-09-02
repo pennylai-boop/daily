@@ -9,7 +9,9 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import type { DayEntry, SharedJournal, ShareScope } from "@/lib/types";
 
-export type AuthResult = { ok: true; userId: string } | { ok: false; status: number; error: string };
+export type AuthResult =
+  | { ok: true; userId: string; email: string | null }
+  | { ok: false; status: number; error: string };
 
 export async function requireUser(request: Request): Promise<AuthResult> {
   const header = request.headers.get("authorization") ?? "";
@@ -18,7 +20,17 @@ export async function requireUser(request: Request): Promise<AuthResult> {
 
   const { data, error } = await getSupabaseAdmin().auth.getUser(token);
   if (error || !data.user) return { ok: false, status: 401, error: "登入已過期，請重新登入。" };
-  return { ok: true, userId: data.user.id };
+  return { ok: true, userId: data.user.id, email: data.user.email ?? null };
+}
+
+/** 贊助／點數可以未登入下單；有帶 Bearer 就把訂單綁到帳號，付款紀錄才找得到。 */
+export async function optionalUser(
+  request: Request,
+): Promise<{ userId: string; email: string | null } | null> {
+  const header = request.headers.get("authorization") ?? "";
+  if (!header.startsWith("Bearer ")) return null;
+  const auth = await requireUser(request);
+  return auth.ok ? { userId: auth.userId, email: auth.email } : null;
 }
 
 type PeekResult =

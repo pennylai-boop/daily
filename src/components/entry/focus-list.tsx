@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CheckIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { CheckIcon, PencilIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { TextInput } from "@/components/ui/field";
@@ -19,6 +19,8 @@ export function FocusList({
   placeholder?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
 
   const add = () => {
     const text = draft.trim();
@@ -27,11 +29,30 @@ export function FocusList({
     setDraft("");
   };
 
+  const startEdit = (item: FocusItem) => {
+    setEditingId(item.id);
+    setEditDraft(item.text);
+  };
+
+  const commitEdit = (item: FocusItem) => {
+    const text = editDraft.trim();
+    setEditingId(null);
+    if (!text || text === item.text) return;
+    onChange(items.map((current) => (current.id === item.id ? { ...current, text } : current)));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft("");
+  };
+
   return (
     <div className="space-y-2.5">
       {items.length > 0 ? (
         <ul className="space-y-1.5">
-          {items.map((item) => (
+          {items.map((item) => {
+            const editing = editingId === item.id;
+            return (
             <li key={item.id} className="flex items-center gap-2">
               <button
                 type="button"
@@ -54,14 +75,35 @@ export function FocusList({
               >
                 {item.done ? <CheckIcon className="size-3.5" strokeWidth={2.6} /> : null}
               </button>
-              <span
-                className={cn(
-                  "flex-1 text-sm",
-                  item.done ? "text-ink-subtle line-through" : "text-ink",
-                )}
-              >
-                {item.text}
-              </span>
+              {editing ? (
+                <TextInput
+                  autoFocus
+                  value={editDraft}
+                  aria-label={`修改目標：${item.text}`}
+                  className="h-8 flex-1 py-0 text-sm"
+                  onChange={(event) => setEditDraft(event.target.value)}
+                  onBlur={() => commitEdit(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitEdit(item);
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelEdit();
+                    }
+                  }}
+                />
+              ) : (
+                <span
+                  className={cn(
+                    "flex-1 text-sm",
+                    item.done ? "text-ink-subtle line-through" : "text-ink",
+                  )}
+                >
+                  {item.text}
+                </span>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -71,8 +113,31 @@ export function FocusList({
               >
                 <TrashIcon className="size-3.5" />
               </Button>
+              {editing ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`完成修改：${item.text}`}
+                  className="size-7 px-0"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => commitEdit(item)}
+                >
+                  <CheckIcon className="size-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`修改目標：${item.text}`}
+                  className="size-7 px-0"
+                  onClick={() => startEdit(item)}
+                >
+                  <PencilIcon className="size-3.5" />
+                </Button>
+              )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       ) : null}
 

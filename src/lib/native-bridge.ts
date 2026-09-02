@@ -31,6 +31,12 @@ export interface NativeBridge {
   share?: (payload: string) => boolean | Promise<boolean> | void;
   /** 用系統瀏覽器開啟外部網址（WebView 內開第三方頁面常會被擋）。 */
   openExternal?: (url: string) => boolean | void;
+  /**
+   * 專心模式：請原生殼盡力鎖住其他 App（例如 iOS 引導使用／Android 鎖定工作）。
+   * 網頁做不到這件事；殼還沒實作時回 false。
+   */
+  lockApps?: () => boolean | Promise<boolean> | void;
+  unlockApps?: () => boolean | Promise<boolean> | void;
 }
 
 declare global {
@@ -59,6 +65,27 @@ export async function nativeShare(payload: NativeSharePayload): Promise<boolean>
   } catch (error) {
     console.error("[native] share 失敗，退回瀏覽器的做法。", error);
     return false;
+  }
+}
+
+export async function nativeLockApps(): Promise<boolean> {
+  const bridge = getNativeBridge();
+  if (typeof bridge?.lockApps !== "function") return false;
+  try {
+    return (await bridge.lockApps()) !== false;
+  } catch (error) {
+    console.error("[native] lockApps 失敗。", error);
+    return false;
+  }
+}
+
+export async function nativeUnlockApps(): Promise<void> {
+  const bridge = getNativeBridge();
+  if (typeof bridge?.unlockApps !== "function") return;
+  try {
+    await bridge.unlockApps();
+  } catch (error) {
+    console.error("[native] unlockApps 失敗。", error);
   }
 }
 

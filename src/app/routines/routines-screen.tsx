@@ -123,7 +123,7 @@ export function RoutinesScreen() {
       </Card>
 
       <div className="flex items-center gap-2 px-1">
-        <h2 className="text-sm font-semibold text-ink-muted">重複進行</h2>
+        <h2 className="text-base font-semibold tracking-tight text-ink">每日目標</h2>
         <InfoHint label="重複目標是什麼">
           設定頻率後，天天會在該做的日子排進當天清單。點一列可以看完成統計。
         </InfoHint>

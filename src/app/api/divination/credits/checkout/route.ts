@@ -11,6 +11,7 @@ import { CREDIT_PRODUCT_NAME, getCreditPack } from "@/lib/divination-credits";
 import { hasInvoiceErrors, parseInvoice, validateInvoice } from "@/lib/invoice";
 import { createSponsorInput, getMethod, type SponsorMethod } from "@/lib/support";
 import { buildUppRequest, createMerTradeNo, payuniConfig } from "@/server/payuni";
+import { optionalUser } from "@/server/sharing";
 import { createOrder } from "@/server/support-orders";
 
 export const runtime = "nodejs";
@@ -65,11 +66,12 @@ export async function POST(request: Request) {
   }
 
   const merTradeNo = createMerTradeNo();
+  const user = await optionalUser(request);
   try {
     await createOrder(
       merTradeNo,
       { ...createSponsorInput(), amount: pack.amount, method, email },
-      { product: "credits", credits: pack.credits, invoice },
+      { product: "credits", credits: pack.credits, invoice, userId: user?.userId },
     );
   } catch (e) {
     console.error("[divination/credits] 建立訂單失敗：", e);

@@ -34,6 +34,11 @@ export interface SponsorOrder {
   userId?: string;
   /** 無廣告訂閱已把效期加上去的時間；重送 Notify 時不要再加 30 天。 */
   entitlementAppliedAt?: number;
+  /** PAYUNi 續期收款單號；每月自動扣款的各期共用。 */
+  periodTradeNo?: string;
+  /** 本期 PeriodOrderNo，用來避免同一期重覆入帳。 */
+  periodOrderNo?: string;
+  thisPeriod?: number;
   tradeNo?: string;
   paidAt?: number;
   /** 贊助是感謝信，點數是兌換碼信，兩者共用這組欄位。 */
@@ -58,6 +63,9 @@ type SponsorOrderRow = {
   invoice: unknown;
   user_id: string | null;
   entitlement_applied_at: string | null;
+  period_trade_no: string | null;
+  period_order_no: string | null;
+  this_period: number | null;
   invoice_number: string | null;
   invoice_issued_at: string | null;
   invoice_error: string | null;
@@ -85,6 +93,9 @@ function fromRow(row: SponsorOrderRow): SponsorOrder {
     entitlementAppliedAt: row.entitlement_applied_at
       ? new Date(row.entitlement_applied_at).getTime()
       : undefined,
+    periodTradeNo: row.period_trade_no ?? undefined,
+    periodOrderNo: row.period_order_no ?? undefined,
+    thisPeriod: row.this_period ?? undefined,
     invoiceNumber: row.invoice_number ?? undefined,
     invoiceIssuedAt: row.invoice_issued_at ? new Date(row.invoice_issued_at).getTime() : undefined,
     invoiceError: row.invoice_error ?? undefined,
@@ -103,6 +114,9 @@ export async function createOrder(
     credits: number;
     invoice?: InvoiceInput | null;
     userId?: string | null;
+    periodTradeNo?: string | null;
+    periodOrderNo?: string | null;
+    thisPeriod?: number | null;
   } = { product: "sponsor", credits: 0 },
 ): Promise<SponsorOrder> {
   const db = getSupabaseAdmin();
@@ -121,6 +135,13 @@ export async function createOrder(
       credits: product.credits,
       invoice: product.invoice ? normalizeInvoice(product.invoice) : null,
       user_id: product.userId ?? null,
+      ...(product.periodTradeNo || product.periodOrderNo || product.thisPeriod
+        ? {
+            period_trade_no: product.periodTradeNo ?? null,
+            period_order_no: product.periodOrderNo ?? null,
+            this_period: product.thisPeriod ?? null,
+          }
+        : {}),
     })
     .select()
     .single();
@@ -180,6 +201,11 @@ export async function updateOrder(
       ? new Date(patch.entitlementAppliedAt).toISOString()
       : null;
   }
+  if (has("periodTradeNo")) update.period_trade_no = patch.periodTradeNo ?? null;
+  if (has("periodOrderNo")) update.period_order_no = patch.periodOrderNo ?? null;
+  if (has("thisPeriod")) update.this_period = patch.thisPeriod ?? null;
+  if (has("email")) update.email = patch.email ?? "";
+  if (has("name")) update.name = patch.name ?? "";
 
   const { data, error } = await db
     .from("sponsor_orders")
@@ -195,4 +221,71 @@ export async function updateOrder(
   if (!data) return undefined;
 
   return fromRow(data as SponsorOrderRow);
+}
+
+export async function getOrderByPeriodOrderNo(
+  periodOrderNo: string,
+): Promise<SponsorOrder | undefined> {
+  if (!periodOrderNo) return undefined;
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("sponsor_orders")
+    .select()
+    .eq("period_order_no", periodOrderNo)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[support-orders] 查詢續期訂單 ${periodOrderNo} 失敗：`, error.message);
+    return undefined;
+  }
+  if (!data) return undefined;
+  return fromRow(data as SponsorOrderRow);
+}
+
+/** 登入使用者的付款紀錄：自己下的單，以及尚未綁帳號但信箱相同的舊單。 */
+export async function listOrdersForUser(
+  userId: string,
+  email?: string | null,
+): Promise<SponsorOrder[]> {
+  const db = getSupabaseAdmin();
+  const normalizedEmail = email?.trim() ?? "";
+
+  const { data: owned, error: ownedError } = await db
+    .from("sponsor_orders")
+    .select()
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  if (ownedError) {
+    console.error("[support-orders] 查詢付款紀錄失敗：", ownedError.message);
+    return [];
+  }
+
+  const rows = new Map<string, SponsorOrder>();
+  for (const row of owned ?? []) {
+    const order = fromRow(row as SponsorOrderRow);
+    rows.set(order.merTradeNo, order);
+  }
+
+  if (normalizedEmail) {
+    const { data: mailed, error: mailedError } = await db
+      .from("sponsor_orders")
+      .select()
+      .is("user_id", null)
+      .eq("email", normalizedEmail)
+      .order("created_at", { ascending: false })
+      .limit(80);
+
+    if (mailedError) {
+      console.error("[support-orders] 依信箱查詢舊訂單失敗：", mailedError.message);
+    } else {
+      for (const row of mailed ?? []) {
+        const order = fromRow(row as SponsorOrderRow);
+        if (!rows.has(order.merTradeNo)) rows.set(order.merTradeNo, order);
+      }
+    }
+  }
+
+  return [...rows.values()].sort((a, b) => (b.paidAt ?? b.createdAt) - (a.paidAt ?? a.createdAt));
 }

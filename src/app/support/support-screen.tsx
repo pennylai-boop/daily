@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { HeartIcon } from "@/components/icons";
+import { PaymentHistory } from "@/components/payment-history";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
@@ -10,6 +11,7 @@ import { InfoHint } from "@/components/ui/info-hint";
 import { Segmented } from "@/components/ui/segmented";
 import { Card, PageHeading, SectionHeading } from "@/components/ui/surfaces";
 import { postToGateway } from "@/lib/payment-form";
+import { sessionAccessToken } from "@/lib/session-token";
 import { usePlatform } from "@/lib/platform";
 import {
   createSponsorInput,
@@ -59,9 +61,13 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
 
     setPending("pay");
     try {
+      const token = await sessionAccessToken();
       const response = await fetch("/api/support/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(input),
       });
       const data = (await response.json()) as {
@@ -128,7 +134,7 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
     <div className="hide-in-ios-app mx-auto max-w-2xl space-y-6">
       <PageHeading
         title="支持天天 daily"
-        description="如果它陪你寫下了一些日子，可以用任意金額贊助，讓它繼續維護下去。最下排的廣告可以在設定裡訂閱無廣告版關掉。"
+        description="如果它陪你寫下了一些日子，可以用任意金額贊助，讓它繼續維護下去。最下排的廣告可以訂閱無廣告版關掉。"
       />
 
       {!paymentReady ? (
@@ -282,6 +288,8 @@ export function SupportScreen({ paymentReady }: { paymentReady: boolean }) {
           不想贊助也可以先「送出留言」。付款由統一金流 PAYUNi 處理，卡號不會經過天天 daily。贊助不開發票；付款成功後會自動寄感謝信到你填的信箱。贊助屬於自願支持，不是商品購買，送出後不提供退款。
         </p>
       </footer>
+
+      <PaymentHistory />
     </div>
   );
 }

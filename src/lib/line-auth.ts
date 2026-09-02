@@ -37,21 +37,32 @@ export async function signInWithLine(): Promise<LineLoginResult> {
 }
 
 /**
- * 正式站一律回到 NEXT_PUBLIC_SITE_URL（建置期烤進去的 https://daily.introvista.ai），
- * 避免從 Cloud Run 預設網域或錯誤的 host 登入後被導去別的地方。
- * 本機 SITE_URL 是 localhost，就跟現在這個分頁走。
+ * 登入完成要回到哪裡。
  *
- * 真正能不能回到這個網址，還是看 Supabase Dashboard → Authentication → URL Configuration
- * 的 Site URL／Redirect URLs 有沒有把它列入。沒列入時 GoTrue 會退回 Site URL，
- * 而 Site URL 若還是 http://localhost:3000，正式站登入成功也會跳到本機。
+ * 正在正式網域時，用這個分頁的 origin（不要看烤進去的值），再進固定的
+ * `/auth/callback`，Redirect URLs 只要允許這個路徑即可。
+ * 本機則回到 localhost，方便開發。
+ *
+ * GoTrue 會核對 Dashboard → Authentication → URL Configuration。
+ * Site URL 若還是 http://localhost:3000，正式站的 redirectTo 被拒後就會被退回本機。
  */
-function loginRedirectTo(): string {
-  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
-  if (site && !/localhost|127\.0\.0\.1/.test(site)) {
-    return `${site}${window.location.pathname}${window.location.search}`;
-  }
-  return window.location.href;
+export function loginRedirectTo(): string {
+  const origin = loginOrigin();
+  const next = `${window.location.pathname}${window.location.search}` || "/";
+  return `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
 }
+
+export function loginOrigin(): string {
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1") {
+    return window.location.origin;
+  }
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+  if (site && !/localhost|127\.0\.0\.1/.test(site)) return site;
+  return window.location.origin;
+}
+
+export const PRODUCTION_ORIGIN = "https://daily.introvista.ai";
 
 /**
  * 從目前的 Supabase session 讀出可寫進 settings.profile 的資料。

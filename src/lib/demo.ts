@@ -1,6 +1,7 @@
 import { addDays, todayIso } from "./date";
 import { isRoutineDueOn } from "./routines";
 import { createId, createInviteCode, EMPTY_DIVINATION, STORE_VERSION } from "./storage";
+import { DEFAULT_FOCUS } from "./types";
 import type {
   AppSettings,
   DailyState,
@@ -248,6 +249,8 @@ export function buildDemoState(): DailyState {
     settings: buildDemoSettings(),
     sharedWithMe: buildDemoSharedJournals(),
     divination: EMPTY_DIVINATION,
+    focus: DEFAULT_FOCUS,
+    sharedPepTalks: [],
   };
 }
 

@@ -8,9 +8,16 @@
 import { ADFREE_PRODUCT_NAME } from "@/lib/adfree";
 import { CREDIT_PRODUCT_NAME } from "@/lib/divination-credits";
 import { createInvoiceInput } from "@/lib/invoice";
+import { processAdFreePeriodPayment } from "@/server/adfree-period";
 import { issueCreditCode } from "@/server/credit-codes";
 import { extendAdFree, getAdFreeUntil } from "@/server/adfree";
-import { isPaid, parsePayuniCallback, payuniConfig } from "@/server/payuni";
+import {
+  isPaid,
+  isPeriodCallback,
+  parsePayuniCallback,
+  payuniConfig,
+  toPeriodCallback,
+} from "@/server/payuni";
 import { issueInvoice } from "@/server/smilepay-invoice";
 import { getOrder, updateOrder, type SponsorOrder } from "@/server/support-orders";
 import { sendAdFreeReceipt, sendCreditCode, sendSponsorThankYou } from "@/server/thank-you-email";
@@ -25,6 +32,11 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const callback = parsePayuniCallback(form, config);
   if (!callback) return new Response("invalid", { status: 400 });
+
+  if (isPeriodCallback(callback)) {
+    await processAdFreePeriodPayment(toPeriodCallback(callback));
+    return new Response("OK");
+  }
 
   const order = await getOrder(callback.merTradeNo);
   if (!order) {

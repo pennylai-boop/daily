@@ -42,7 +42,11 @@ export interface RangeWindow {
 
 /** 依照區間長度決定 `全部` 的起點：最早一筆紀錄，沒有資料時退回一個月。 */
 function earliestDate(state: DailyState): IsoDate | null {
-  const dates = [...Object.keys(state.entries), ...Object.keys(state.checks)].sort();
+  const dates = [
+    ...Object.keys(state.entries),
+    ...Object.keys(state.checks),
+    ...(state.focus?.sessions ?? []).map((session) => session.date),
+  ].sort();
   return dates[0] ?? null;
 }
 
@@ -249,6 +253,30 @@ function firstMetricFields(state: DailyState, routineId: string) {
     }
   }
   return [];
+}
+
+/** 專心模式：區間內累積的工作分鐘。 */
+export function focusMinutesSeries(state: DailyState, buckets: Bucket[]): ChartSeries[] {
+  const today = todayIso();
+  return [
+    {
+      id: "focus-minutes",
+      label: "專心時長",
+      color: SERIES_COLORS[1],
+      values: buckets.map((bucket) => {
+        let total = 0;
+        let has = false;
+        for (const day of eachDay(bucket, today)) {
+          for (const session of state.focus?.sessions ?? []) {
+            if (session.date !== day || session.elapsedSeconds <= 0) continue;
+            has = true;
+            total += session.elapsedSeconds;
+          }
+        }
+        return has ? total / 60 : null;
+      }),
+    },
+  ];
 }
 
 /** 心情平均分數（1–5），沒有選心情的區間為 null。 */

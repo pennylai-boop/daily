@@ -1,14 +1,14 @@
 /**
- * 建立無廣告訂閱訂單，回傳要 form post 給 PAYUNi 的欄位。
- * 金額一律 NT$50，不看前端傳來的數字。必須已登入。
+ * 建立無廣告每月自動扣款訂單，回傳要 form post 給 PAYUNi 續期收款頁的欄位。
+ * 金額一律 NT$50，只走信用卡。必須已登入。
  */
 
 import { NextResponse } from "next/server";
 
 import { ADFREE_AMOUNT, ADFREE_PRODUCT_NAME } from "@/lib/adfree";
-import { hasInvoiceErrors, parseInvoice, validateInvoice } from "@/lib/invoice";
-import { createSponsorInput, getMethod, type SponsorMethod } from "@/lib/support";
-import { buildUppRequest, createMerTradeNo, payuniConfig } from "@/server/payuni";
+import { createInvoiceInput, hasInvoiceErrors, parseInvoice, validateInvoice } from "@/lib/invoice";
+import { createSponsorInput } from "@/lib/support";
+import { buildPeriodRequest, createMerTradeNo, payuniConfig } from "@/server/payuni";
 import { requireUser } from "@/server/sharing";
 import { createOrder } from "@/server/support-orders";
 
@@ -30,26 +30,18 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "請求格式不正確。" }, { status: 400 });
+    body = {};
   }
 
   const raw = (body ?? {}) as Record<string, unknown>;
-  const email = typeof raw.email === "string" ? raw.email.trim().slice(0, 80) : "";
-  if (!EMAIL_PATTERN.test(email)) {
-    return NextResponse.json({ error: "請填寫正確的信箱，發票會寄到這裡。" }, { status: 400 });
-  }
+  const rawEmail = typeof raw.email === "string" ? raw.email.trim().slice(0, 80) : "";
+  const email = EMAIL_PATTERN.test(rawEmail)
+    ? rawEmail
+    : auth.email && EMAIL_PATTERN.test(auth.email)
+      ? auth.email
+      : "";
 
-  const method: SponsorMethod =
-    raw.method === "atm" || raw.method === "cvs" ? raw.method : "credit";
-  const limits = getMethod(method);
-  if (ADFREE_AMOUNT < limits.min || ADFREE_AMOUNT > limits.max) {
-    return NextResponse.json(
-      { error: `這個金額不在${limits.label}的可用範圍，請換一種付款方式。` },
-      { status: 400 },
-    );
-  }
-
-  const invoice = parseInvoice(raw.invoice);
+  const invoice = raw.invoice ? parseInvoice(raw.invoice) : createInvoiceInput();
   const invoiceErrors = validateInvoice(invoice);
   if (hasInvoiceErrors(invoiceErrors)) {
     return NextResponse.json(
@@ -62,7 +54,7 @@ export async function POST(request: Request) {
   try {
     await createOrder(
       merTradeNo,
-      { ...createSponsorInput(), amount: ADFREE_AMOUNT, method, email },
+      { ...createSponsorInput(), amount: ADFREE_AMOUNT, method: "credit", email },
       { product: "adfree", credits: 0, invoice, userId: auth.userId },
     );
   } catch (e) {
@@ -70,13 +62,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "暫時無法建立訂單，請稍後再試。" }, { status: 500 });
   }
 
-  const { action, fields } = buildUppRequest({
+  const { action, fields } = buildPeriodRequest({
     config,
     merTradeNo,
     amount: ADFREE_AMOUNT,
-    method,
     email,
-    prodDesc: `${ADFREE_PRODUCT_NAME} 1 個月`,
+    prodDesc: `${ADFREE_PRODUCT_NAME}（每月自動續約）`,
     backPath: "/settings#adfree",
   });
 

@@ -23,7 +23,7 @@ export function AdBanner() {
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] tracking-wide text-ink-subtle">廣告</p>
           <Link
-            href="/settings#adfree"
+            href="/adfree"
             className="text-[11px] font-medium text-accent underline-offset-2 hover:underline"
           >
             訂閱無廣告 NT$50／月

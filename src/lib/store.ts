@@ -3,6 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 import { fetchAdFreeUntil } from "./adfree-checkout";
+import { todayIso } from "./date";
+import { clampFocusMinutes, focusElapsedSeconds, focusShouldComplete } from "./focus";
 import { createCustomMoodId } from "./moods";
 import { profileFromSession } from "./line-auth";
 import { getSupabaseBrowser } from "./supabase-browser";
@@ -38,22 +40,25 @@ import {
   normalizeState,
   saveState,
 } from "./storage";
+import { DEFAULT_FOCUS } from "./types";
 import type {
   CustomMood,
   DailyState,
   DayEntry,
   DivinationRecord,
   FocusItem,
+  FocusSession,
   IsoDate,
   LineShareTarget,
   MoodLevel,
   Profile,
   Routine,
   SharedJournal,
+  SharedPepTalk,
   ShareRecipient,
   ShareScope,
 } from "./types";
-import { resolvePepTalks } from "./pep-talk";
+import { sessionAccessToken } from "./session-token";
 
 /**
  * localStorage 之上的極簡外部狀態容器。
@@ -371,76 +376,67 @@ export function setPepTalkVisible(visible: boolean): void {
   syncProfileSettings();
 }
 
-/** 確保設定裡有一份可編輯清單（若還在用預設，先複製一份再改）。 */
-function editableQuotes(current: DailyState): string[] {
-  return resolvePepTalks(current.settings.pepTalk.quotes);
+export function setSharedPepTalks(quotes: SharedPepTalk[]): void {
+  commit((current) => ({ ...current, sharedPepTalks: quotes }));
 }
 
-export function setPepTalkQuote(index: number, text: string): void {
-  commit((current) => {
-    const quotes = editableQuotes(current);
-    if (index < 0 || index >= quotes.length) return current;
-    const next = text.trim();
-    if (!next) return current;
-    quotes[index] = next;
-    return {
-      ...current,
-      settings: {
-        ...current.settings,
-        pepTalk: { ...current.settings.pepTalk, quotes },
-      },
-    };
-  });
-  syncProfileSettings();
+export async function refreshSharedPepTalks(): Promise<void> {
+  try {
+    const response = await fetch("/api/pep-talks");
+    if (!response.ok) return;
+    const data = (await response.json()) as { quotes?: SharedPepTalk[] };
+    if (Array.isArray(data.quotes)) setSharedPepTalks(data.quotes);
+  } catch {
+    // 離線就用上次快取。
+  }
 }
 
-export function addPepTalkQuote(text: string): boolean {
+export async function addSharedPepTalk(text: string): Promise<string | null> {
   const next = text.trim();
-  if (!next) return false;
-  commit((current) => {
-    const quotes = editableQuotes(current);
-    quotes.unshift(next);
-    return {
-      ...current,
-      settings: {
-        ...current.settings,
-        pepTalk: { ...current.settings.pepTalk, quotes },
+  if (!next) return "請寫下一則金句。";
+  const token = await sessionAccessToken();
+  if (!token) return "請先用 LINE 登入，新增的金句才會出現在大家的清單裡。";
+
+  const name = (cache ?? loadState()).settings.profile.name;
+  try {
+    const response = await fetch("/api/pep-talks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
-    };
-  });
-  syncProfileSettings();
-  return true;
+      body: JSON.stringify({ text: next, authorName: name }),
+    });
+    const data = (await response.json()) as { quote?: SharedPepTalk; error?: string };
+    if (!response.ok || !data.quote) return data.error ?? "新增失敗，請稍後再試。";
+    commit((current) => ({
+      ...current,
+      sharedPepTalks: [data.quote!, ...current.sharedPepTalks.filter((item) => item.id !== data.quote!.id)],
+    }));
+    return null;
+  } catch {
+    return "連線失敗，請稍後再試。";
+  }
 }
 
-export function removePepTalkQuote(index: number): void {
-  commit((current) => {
-    const quotes = editableQuotes(current);
-    if (index < 0 || index >= quotes.length) return current;
-    quotes.splice(index, 1);
-    return {
+export async function removeSharedPepTalk(id: string): Promise<string | null> {
+  const token = await sessionAccessToken();
+  if (!token) return "請先登入。";
+  try {
+    const response = await fetch(`/api/pep-talks/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) return data.error ?? "刪除失敗，請稍後再試。";
+    commit((current) => ({
       ...current,
-      settings: {
-        ...current.settings,
-        pepTalk: {
-          ...current.settings.pepTalk,
-          // 刪光之後仍存空陣列，避免又跳回預設 250 則把刪除撤銷掉。
-          quotes,
-        },
-      },
-    };
-  });
-  syncProfileSettings();
-}
-
-export function resetPepTalkQuotes(): void {
-  commit((current) => ({
-    ...current,
-    settings: {
-      ...current.settings,
-      pepTalk: { ...current.settings.pepTalk, quotes: null },
-    },
-  }));
-  syncProfileSettings();
+      sharedPepTalks: current.sharedPepTalks.filter((item) => item.id !== id),
+    }));
+    return null;
+  } catch {
+    return "連線失敗，請稍後再試。";
+  }
 }
 
 /**
@@ -590,7 +586,12 @@ export async function syncOnLogin(user: {
   commit(() => merged);
 
   await pushWholeState(merged, user.id);
-  await Promise.all([refreshRecipients(), refreshSharedJournals(), refreshAdFreeStatus()]);
+  await Promise.all([
+    refreshRecipients(),
+    refreshSharedJournals(),
+    refreshAdFreeStatus(),
+    refreshSharedPepTalks(),
+  ]);
 }
 
 /**
@@ -650,6 +651,68 @@ export function setDivinationCredits(code: string, remaining: number): void {
   }));
 }
 
+function focusOf(state: DailyState) {
+  return state.focus ?? DEFAULT_FOCUS;
+}
+
+export function setFocusPomodoroMinutes(minutes: number): void {
+  const next = clampFocusMinutes(minutes);
+  commit((current) => ({
+    ...current,
+    focus: { ...focusOf(current), pomodoroMinutes: next },
+  }));
+}
+
+export function startFocusSession(minutes?: number): void {
+  const planned = clampFocusMinutes(minutes ?? focusOf(cache ?? loadState()).pomodoroMinutes);
+  commit((current) => ({
+    ...current,
+    focus: {
+      ...focusOf(current),
+      pomodoroMinutes: planned,
+      runningStartedAt: new Date().toISOString(),
+      runningPlannedMinutes: planned,
+    },
+  }));
+}
+
+/** 結束進行中的專心時段並寫進紀錄。倒數走完傳 completed=true。 */
+export function finishFocusSession(completed: boolean): void {
+  commit((current) => {
+    const focus = focusOf(current);
+    const running = focus.runningStartedAt;
+    if (!running) return current;
+
+    const cap = focus.runningPlannedMinutes * 60;
+    const elapsed = Math.min(cap, focusElapsedSeconds(focus));
+    const now = new Date().toISOString();
+    const session: FocusSession = {
+      id: createId(),
+      date: todayIso(),
+      plannedMinutes: focus.runningPlannedMinutes,
+      elapsedSeconds: Math.max(0, completed ? cap : elapsed),
+      startedAt: running,
+      endedAt: now,
+      completed,
+    };
+
+    return {
+      ...current,
+      focus: {
+        ...focus,
+        runningStartedAt: null,
+        sessions: [...focus.sessions, session].slice(-200),
+      },
+    };
+  });
+}
+
+/** 若上一輪倒數已經超過時間（關分頁後再回來），直接記成完成。 */
+export function settleExpiredFocus(): void {
+  const current = cache ?? loadState();
+  if (focusShouldComplete(focusOf(current))) finishFocusSession(true);
+}
+
 export function clearDivinationCredits(): void {
   commit((current) => ({
     ...current,
@@ -687,10 +750,9 @@ export interface DailyStore {
   removeLineTarget: typeof removeLineTarget;
   markLineTargetUsed: typeof markLineTargetUsed;
   setPepTalkVisible: typeof setPepTalkVisible;
-  setPepTalkQuote: typeof setPepTalkQuote;
-  addPepTalkQuote: typeof addPepTalkQuote;
-  removePepTalkQuote: typeof removePepTalkQuote;
-  resetPepTalkQuotes: typeof resetPepTalkQuotes;
+  refreshSharedPepTalks: typeof refreshSharedPepTalks;
+  addSharedPepTalk: typeof addSharedPepTalk;
+  removeSharedPepTalk: typeof removeSharedPepTalk;
   createInvite: typeof createInvite;
   acceptInvite: typeof acceptInvite;
   updateRecipient: typeof updateRecipient;
@@ -702,6 +764,10 @@ export interface DailyStore {
   setDivinationNote: typeof setDivinationNote;
   setDivinationCredits: typeof setDivinationCredits;
   clearDivinationCredits: typeof clearDivinationCredits;
+  setFocusPomodoroMinutes: typeof setFocusPomodoroMinutes;
+  startFocusSession: typeof startFocusSession;
+  finishFocusSession: typeof finishFocusSession;
+  settleExpiredFocus: typeof settleExpiredFocus;
   replaceState: typeof replaceState;
   resetAll: typeof resetAll;
 }
@@ -730,10 +796,9 @@ export function useDailyStore(): DailyStore {
     removeLineTarget,
     markLineTargetUsed,
     setPepTalkVisible,
-    setPepTalkQuote,
-    addPepTalkQuote,
-    removePepTalkQuote,
-    resetPepTalkQuotes,
+    refreshSharedPepTalks,
+    addSharedPepTalk,
+    removeSharedPepTalk,
     createInvite,
     acceptInvite,
     updateRecipient,
@@ -745,6 +810,10 @@ export function useDailyStore(): DailyStore {
     setDivinationNote,
     setDivinationCredits,
     clearDivinationCredits,
+    setFocusPomodoroMinutes,
+    startFocusSession,
+    finishFocusSession,
+    settleExpiredFocus,
     replaceState,
     resetAll,
   };

@@ -18,11 +18,17 @@ const UPP_URL = {
   production: "https://api.payuni.com.tw/api/upp",
 } as const;
 
+const PERIOD_PAGE_URL = {
+  sandbox: "https://sandbox-api.payuni.com.tw/api/period/Page",
+  production: "https://api.payuni.com.tw/api/period/Page",
+} as const;
+
 export interface PayuniConfig {
   merId: string;
   hashKey: string;
   hashIv: string;
   uppUrl: string;
+  periodUrl: string;
   siteUrl: string;
 }
 
@@ -45,6 +51,7 @@ export function payuniConfig(): PayuniConfig | null {
     hashKey,
     hashIv,
     uppUrl: UPP_URL[env],
+    periodUrl: PERIOD_PAGE_URL[env],
     siteUrl: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
   };
 }
@@ -153,6 +160,58 @@ export function buildUppRequest(params: {
   };
 }
 
+/** 台灣當天是幾號，給續期收款當每月扣款日。沒有那一天的月份會改扣該月最後一天。 */
+function taipeiDayOfMonth(now = new Date()): string {
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    day: "numeric",
+  }).format(now);
+  return day;
+}
+
+/**
+ * PAYUNi 續期收款支付頁（定期定額）。信用卡每月自動扣款。
+ * 規格見 docs/PAYUNi_API_金流物流串接資料.md「續期收款-支付頁」。
+ */
+export function buildPeriodRequest(params: {
+  config: PayuniConfig;
+  merTradeNo: string;
+  amount: number;
+  email?: string;
+  prodDesc: string;
+  backPath?: string;
+}): UppRequest {
+  const { config, merTradeNo, amount } = params;
+
+  const payload: Record<string, string | number> = {
+    MerID: config.merId,
+    MerTradeNo: merTradeNo,
+    PeriodAmt: amount,
+    ProdDesc: params.prodDesc,
+    PeriodType: "month",
+    PeriodDate: taipeiDayOfMonth(),
+    PeriodTimes: "900",
+    FType: "build",
+    NotifyURL: `${config.siteUrl}/api/adfree/notify`,
+    ReturnURL: `${config.siteUrl}/api/adfree/return`,
+    BackURL: `${config.siteUrl}${params.backPath ?? "/settings"}`,
+  };
+
+  if (params.email) payload.PayerEmail = params.email;
+
+  const encrypted = encryptInfo(payload, config);
+
+  return {
+    action: config.periodUrl,
+    fields: {
+      MerID: config.merId,
+      Version: "1.0",
+      EncryptInfo: encrypted,
+      HashInfo: hashInfo(encrypted, config),
+    },
+  };
+}
+
 export interface PayuniCallback {
   /** SUCCESS / UNKNOWN / UNAPPROVED 或錯誤代碼。 */
   status: string;
@@ -219,4 +278,47 @@ export function parsePayuniCallback(
 /** 信用卡授權成功（TradeStatus=1）才算真的收到錢；ATM／超商只是取號。 */
 export function isPaid(callback: PayuniCallback): boolean {
   return callback.status === "SUCCESS" && callback.tradeStatus === "1";
+}
+
+export interface PeriodCallback {
+  status: string;
+  message: string;
+  merTradeNo: string;
+  periodTradeNo: string;
+  periodOrderNo: string;
+  tradeNo: string;
+  authAmt: number;
+  thisPeriod: number;
+  nextAuthDate: string;
+  payerEmail: string;
+  payerName: string;
+  raw: Record<string, string>;
+}
+
+export function isPeriodCallback(callback: PayuniCallback): boolean {
+  return Boolean(callback.raw.PeriodTradeNo || callback.raw.PeriodOrderNo);
+}
+
+export function toPeriodCallback(callback: PayuniCallback): PeriodCallback {
+  const data = callback.raw;
+  const thisPeriod = Number(data.ThisPeriod ?? 0);
+  return {
+    status: callback.status,
+    message: callback.message,
+    merTradeNo: callback.merTradeNo,
+    periodTradeNo: data.PeriodTradeNo ?? "",
+    periodOrderNo: data.PeriodOrderNo || (thisPeriod ? `${callback.merTradeNo}_${thisPeriod}` : ""),
+    tradeNo: callback.tradeNo || data.TradeNo || "",
+    authAmt: Number(data.AuthAmt ?? data.PeriodAmt ?? callback.tradeAmt ?? 0),
+    thisPeriod,
+    nextAuthDate: data.NextAuthDate ?? "",
+    payerEmail: data.PayerEmail ?? "",
+    payerName: data.PayerName ?? "",
+    raw: data,
+  };
+}
+
+/** 續期收款沒有 TradeStatus；Status=SUCCESS 就是這一期授權成功。 */
+export function isPeriodPaid(callback: PeriodCallback): boolean {
+  return callback.status === "SUCCESS";
 }

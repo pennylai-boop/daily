@@ -5,17 +5,17 @@
  * 沒有網路也能照樣寫紀錄。策略刻意保守：
  * - 頁面：先連網，失敗才用快取，最後退回快取裡的首頁
  * - /_next/static 與圖示：內容有雜湊，直接快取優先
- * - /api、/support*、/divination/credits* 與 /adfree*：完全不碰。付款、點數與訂閱效期一定要即時。
+ * - /api、/support*、/divination/credits*、/adfree* 與 /auth*：完全不碰。付款、登入與訂閱一定要即時。
  *
  * 改動這個檔案時記得同時改 VERSION，舊快取才會在啟用階段被清掉。
  * NEXT_PUBLIC_* 是建置期烤進 bundle 的，換掉它們的值等於換掉一批 chunk 的內容；
  * 這種部署也要跟著進 VERSION，否則舊 chunk 會一直留在 ASSET_CACHE 裡被 cache-first 命中。
  */
 
-const VERSION = "v6";
+const VERSION = "v9";
 const SHELL_CACHE = `daily-shell-${VERSION}`;
 const ASSET_CACHE = `daily-assets-${VERSION}`;
-const SHELL_ROUTES = ["/", "/routines", "/insights", "/divination", "/shared", "/settings"];
+const SHELL_ROUTES = ["/", "/routines", "/focus", "/insights", "/divination", "/shared", "/settings"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -56,7 +56,9 @@ self.addEventListener("fetch", (event) => {
   if (
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/support") ||
-    url.pathname.startsWith("/divination/credits")
+    url.pathname.startsWith("/divination/credits") ||
+    url.pathname.startsWith("/adfree") ||
+    url.pathname.startsWith("/auth")
   ) {
     return;
   }

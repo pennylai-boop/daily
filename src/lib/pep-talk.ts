@@ -1,8 +1,7 @@
 /**
  * 打氣小語（預設清單）。句子偏長一點，像一句完整的雞湯，而不是標語。
  *
- * 使用者可在「設定 → 打氣小語」新增、修改、刪除；一旦改過，完整清單會存進
- * localStorage，之後以設定裡的版本為準。`resetPepTalkQuotes` 可回到這份預設。
+ * 系統預設不能改、不能刪。登入後可新增一則給全站共享；只有作者能刪自己的。
  *
  * 寫作原則：語氣像旁邊的人慢慢說完一句；不預設對方的職業、信仰或身體狀況。
  */
@@ -260,12 +259,10 @@ export const DEFAULT_PEP_TALKS: readonly string[] = [
   "你寫下的每一行，都在證明你還願意與自己對話。",
 ];
 
-/** 目前生效的金句清單：有自訂就用自訂，否則用預設。 */
-export function resolvePepTalks(custom: readonly string[] | null | undefined): string[] {
-  if (Array.isArray(custom) && custom.length > 0) {
-    return custom.map((q) => q.trim()).filter(Boolean);
-  }
-  return [...DEFAULT_PEP_TALKS];
+/** 頂部跑馬燈用的清單：大家新增的在前，接著是系統預設。 */
+export function resolvePepTalks(shared: readonly { text: string }[] | null | undefined): string[] {
+  const extras = (shared ?? []).map((item) => item.text.trim()).filter(Boolean);
+  return extras.length > 0 ? [...extras, ...DEFAULT_PEP_TALKS] : [...DEFAULT_PEP_TALKS];
 }
 
 /**

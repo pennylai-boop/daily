@@ -21,6 +21,7 @@ import {
   RANGE_OPTIONS,
   routineRateSeries,
   timerMinutesSeries,
+  focusMinutesSeries,
   type RangeId,
 } from "@/lib/series";
 import {
@@ -56,8 +57,9 @@ export function InsightsScreen() {
     (state.entries[today]?.focus.length ?? 0) > 0 ||
     Object.values(state.weekGoals).some((items) => items.length > 0) ||
     Object.values(state.monthGoals).some((items) => items.length > 0);
+  const hasFocus = (state.focus?.sessions.length ?? 0) > 0;
 
-  if (dates.length === 0 && !hasRoutines && !hasGoals) {
+  if (dates.length === 0 && !hasRoutines && !hasGoals && !hasFocus) {
     return (
       <div className="mx-auto max-w-5xl space-y-6">
         <PageHeading title="回顧" description="看看這段時間留下了什麼。" />
@@ -113,6 +115,20 @@ export function InsightsScreen() {
       </Card>
 
       <PeriodGoalsStatus state={state} today={today} />
+
+      {hasFocus ? (
+        <Card className="px-4 py-4 sm:px-5">
+          <SectionHeading title="專心模式" description={`${rangeLabel}的工作時長（分鐘）`} />
+          <div className="mt-4">
+            <LineChart
+              labels={window.buckets.map((bucket) => bucket.label)}
+              series={focusMinutesSeries(state, window.buckets)}
+              formatValue={(value) => `${Math.round(value * 10) / 10} 分`}
+              emptyHint="這段期間還沒有專心紀錄。"
+            />
+          </div>
+        </Card>
+      ) : null}
 
       {activeRoutines
         .filter((routine) => routine.template === "timer")

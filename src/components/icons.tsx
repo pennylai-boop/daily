@@ -37,6 +37,16 @@ export function CalendarIcon(props: IconProps) {
   );
 }
 
+export function FocusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5" />
+    </Icon>
+  );
+}
+
 export function RepeatIcon(props: IconProps) {
   return (
     <Icon {...props}>

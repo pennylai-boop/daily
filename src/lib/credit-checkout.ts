@@ -7,6 +7,7 @@
 
 import type { InvoiceErrors, InvoiceInput } from "./invoice";
 import { postToGateway } from "./payment-form";
+import { sessionAccessToken } from "./session-token";
 import type { SponsorMethod } from "./support";
 
 export interface CheckoutFailure {
@@ -25,9 +26,13 @@ export async function startCreditCheckout(input: {
   invoice?: InvoiceInput;
 }): Promise<CheckoutFailure | null> {
   try {
+    const token = await sessionAccessToken();
     const response = await fetch("/api/divination/credits/checkout", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(input),
     });
     const data = (await response.json()) as {

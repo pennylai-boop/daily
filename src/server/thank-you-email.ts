@@ -91,8 +91,8 @@ export async function sendAdFreeReceipt(params: {
 }): Promise<MailResult> {
   const greeting = params.name.trim() || "朋友";
   const untilLine = params.until
-    ? `這次訂閱有效至 ${formatAdFreeUntil(params.until)}。到期前再付一次就會往後延 30 天。`
-    : "付款已確認，登入同一支 LINE 後廣告就會關掉。";
+    ? `這次扣款後有效至 ${formatAdFreeUntil(params.until)}。之後每月會用同一張信用卡自動續約。`
+    : "付款已確認，登入同一支 LINE 後廣告就會關掉。之後每月會自動續約。";
   return sendMail({
     to: params.email,
     subject: `天天 daily ${ADFREE_PRODUCT_NAME}已生效`,

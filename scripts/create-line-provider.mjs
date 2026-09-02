@@ -7,8 +7,13 @@
  *   1. LINE Developers 後台的 Login channel，Callback URL 已填
  *      https://<你的專案>.supabase.co/auth/v1/callback
  *   2. Supabase Dashboard → Authentication → URL Configuration
- *      Site URL = https://daily.introvista.ai
- *      Redirect URLs 含 https://daily.introvista.ai/** 與本機 http://localhost:3000/**
+ *      Site URL = https://daily.introvista.ai（不能是 localhost，否則正式站登入會被退回本機）
+ *      Redirect URLs 含
+ *        https://daily.introvista.ai
+ *        https://daily.introvista.ai/**
+ *        https://daily.introvista.ai/auth/callback
+ *        http://localhost:3000/**
+ *        http://localhost:3000/auth/callback
  *   3. .env.local 已經有 NEXT_PUBLIC_SUPABASE_URL、SUPABASE_SECRET_KEY、
  *      LINE_LOGIN_CHANNEL_ID、LINE_LOGIN_CHANNEL_SECRET
  *   4. https://daily.introvista.ai/api/auth/line-userinfo 已經部署上線

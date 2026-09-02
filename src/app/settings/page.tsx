@@ -20,7 +20,9 @@ export default async function Page({
   const raw = params.adfree;
   const flag = Array.isArray(raw) ? raw[0] : raw;
   const adFreeNotice =
-    flag === "ok" ? "付款已確認。若廣告還沒關掉，請稍等 Notify 入帳後重新整理。" : null;
+    flag === "ok"
+      ? "付款已確認，之後每月會自動續約。若廣告還沒關掉，請稍等入帳後重新整理。"
+      : null;
 
   return <SettingsScreen paymentReady={isPayuniConfigured()} adFreeNotice={adFreeNotice} />;
 }

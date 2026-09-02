@@ -16,9 +16,16 @@ import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
 import { copyInviteUrl, shareInvite } from "@/lib/line-invite";
 import { signInWithLine } from "@/lib/line-auth";
-import { DEFAULT_PEP_TALKS, resolvePepTalks } from "@/lib/pep-talk";
+import { DEFAULT_PEP_TALKS } from "@/lib/pep-talk";
 import { recordedDates } from "@/lib/stats";
-import { refreshRecipients, useDailyStore } from "@/lib/store";
+import {
+  addSharedPepTalk,
+  refreshRecipients,
+  refreshSharedPepTalks,
+  removeSharedPepTalk,
+  useDailyStore,
+} from "@/lib/store";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { normalizeState } from "@/lib/storage";
 import { setThemePreference, useThemePreference } from "@/lib/theme";
 import type { Profile, ShareRecipient, ShareScope, ThemePreference } from "@/lib/types";
@@ -234,25 +241,48 @@ function AccountPanel({
 function PepTalkSettingsCard() {
   const store = useDailyStore();
   const { pepTalk } = store.state.settings;
-  const quotes = resolvePepTalks(pepTalk.quotes);
-  const usingDefault = pepTalk.quotes === null;
+  const loggedIn = Boolean(store.state.settings.profile.lineUserId);
+  const shared = store.state.sharedPepTalks;
   const [draft, setDraft] = useState("");
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const filtered = filter.trim()
-    ? quotes
-        .map((text, index) => ({ text, index }))
-        .filter(({ text }) => text.includes(filter.trim()))
-    : quotes.map((text, index) => ({ text, index }));
+  useEffect(() => {
+    void refreshSharedPepTalks();
+    const supabase = getSupabaseBrowser();
+    if (!supabase) return;
+    void supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, []);
 
-  const shown = expanded ? filtered : filtered.slice(0, 8);
+  const query = filter.trim();
+  const sharedShown = query ? shared.filter((item) => item.text.includes(query)) : shared;
+  const defaultsShown = query
+    ? DEFAULT_PEP_TALKS.filter((text) => text.includes(query))
+    : DEFAULT_PEP_TALKS;
+  const defaultPreview = expanded ? defaultsShown : defaultsShown.slice(0, 6);
+
+  const submit = async () => {
+    setNotice(null);
+    setPending(true);
+    const error = await addSharedPepTalk(draft);
+    setPending(false);
+    if (error) {
+      setNotice(error);
+      return;
+    }
+    setDraft("");
+  };
 
   return (
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="打氣小語"
-        description="貼在畫面最上方的一句話。點太陽可隱藏，這裡可以重新開啟，也可新增、修改全部金句。"
+        description="頂部跑馬燈會輪播系統預設與大家新增的金句。預設不能改；你新增的會給所有人看到，也只有你能刪。"
         action={
           <Switch
             checked={pepTalk.visible}
@@ -266,23 +296,23 @@ function PepTalkSettingsCard() {
         className="mt-4 flex flex-col gap-2 sm:flex-row"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!store.addPepTalkQuote(draft)) return;
-          setDraft("");
-          setExpanded(true);
+          void submit();
         }}
       >
         <TextInput
           value={draft}
           maxLength={120}
           aria-label="新增金句"
-          placeholder="新增一則金句…"
+          placeholder={loggedIn ? "寫一則給大家的金句…" : "登入後才能新增給大家看的金句"}
           className="flex-1"
+          disabled={!loggedIn || pending}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <Button type="submit" size="sm" disabled={!draft.trim()} className="shrink-0">
-          新增
+        <Button type="submit" size="sm" disabled={!loggedIn || !draft.trim() || pending} className="shrink-0">
+          {pending ? "新增中…" : "新增"}
         </Button>
       </form>
+      {notice ? <p className="mt-2 text-[13px] font-semibold text-alert">{notice}</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <TextInput
@@ -293,53 +323,65 @@ function PepTalkSettingsCard() {
           onChange={(event) => setFilter(event.target.value)}
         />
         <p className="text-[13px] text-ink-muted">
-          共 {quotes.length} 則
-          {usingDefault ? "（預設）" : "（已自訂）"}
+          大家新增 {shared.length} 則・預設 {DEFAULT_PEP_TALKS.length} 則
         </p>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="ml-auto"
-          onClick={() => {
-            if (!window.confirm("還原成內建金句？你新增或改過的內容會消失。")) return;
-            store.resetPepTalkQuotes();
-            setFilter("");
-          }}
-        >
-          還原預設（{DEFAULT_PEP_TALKS.length}）
-        </Button>
       </div>
 
-      <ul className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1">
-        {shown.map(({ text, index }) => (
-          <li key={`${index}-${text.slice(0, 12)}`} className="flex items-start gap-2">
-            <textarea
-              value={text}
-              rows={1}
-              maxLength={120}
-              aria-label={`金句 ${index + 1}`}
-              className="min-h-10 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-brand"
-              onChange={(event) => store.setPepTalkQuote(index, event.target.value)}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              aria-label={`刪除金句 ${index + 1}`}
-              className="mt-1 size-9 shrink-0 px-0 text-alert"
-              onClick={() => store.removePepTalkQuote(index)}
-            >
-              <TrashIcon className="size-4" />
-            </Button>
+      {sharedShown.length > 0 ? (
+        <ul className="mt-3 space-y-2">
+          {sharedShown.map((item) => {
+            const mine = Boolean(userId && item.userId === userId);
+            return (
+              <li key={item.id} className="flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] leading-relaxed text-ink">{item.text}</p>
+                  <p className="mt-1 text-[12px] text-ink-subtle">
+                    {item.authorName || "朋友"}
+                    {mine ? "（你新增的）" : ""}
+                  </p>
+                </div>
+                {mine ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    aria-label="刪除這則金句"
+                    className="mt-0.5 size-9 shrink-0 px-0 text-alert"
+                    onClick={() => {
+                      void removeSharedPepTalk(item.id).then((error) => {
+                        if (error) setNotice(error);
+                      });
+                    }}
+                  >
+                    <TrashIcon className="size-4" />
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="mt-3 text-[13px] text-ink-muted">
+          {query ? "沒有符合的共享金句。" : "還沒有人新增共享金句。"}
+        </p>
+      )}
+
+      <p className="mt-5 text-[13px] font-medium text-ink-muted">系統預設（不能刪）</p>
+      <ul className="mt-2 max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+        {defaultPreview.map((text) => (
+          <li
+            key={text.slice(0, 24)}
+            className="rounded-lg bg-paper-tint px-3 py-2 text-[13px] leading-relaxed text-ink-muted"
+          >
+            {text}
           </li>
         ))}
-        {filtered.length === 0 ? (
-          <li className="py-6 text-center text-[13px] text-ink-muted">沒有符合的金句。</li>
+        {defaultsShown.length === 0 ? (
+          <li className="py-4 text-center text-[13px] text-ink-muted">沒有符合的預設金句。</li>
         ) : null}
       </ul>
 
-      {filtered.length > 8 ? (
+      {defaultsShown.length > 6 ? (
         <Button
           type="button"
           variant="ghost"
@@ -347,7 +389,7 @@ function PepTalkSettingsCard() {
           className="mt-2 w-full"
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? "收合列表" : `展開全部（還有 ${filtered.length - 8} 則）`}
+          {expanded ? "收合預設清單" : `展開預設（還有 ${defaultsShown.length - 6} 則）`}
         </Button>
       ) : null}
     </Card>
@@ -359,7 +401,7 @@ function LegalLinks() {
   const linkClass =
     "inline-flex min-h-9 items-center text-xs text-ink-subtle underline-offset-4 transition-colors hover:text-ink-muted hover:underline sm:min-h-0";
   return (
-    <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-subtle">
+    <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-subtle">
       <Link href="/privacy" className={linkClass}>
         隱私權政策
       </Link>

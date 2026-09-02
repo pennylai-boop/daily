@@ -40,8 +40,8 @@ function marqueeDurationSec(quotes: string[]): number {
  */
 export function PepTalkBanner() {
   const { state, ready } = useDailyStore();
-  const quotes = state.settings.pepTalk.quotes;
-  const pool = useMemo(() => resolvePepTalks(quotes), [quotes]);
+  const shared = state.sharedPepTalks;
+  const pool = useMemo(() => resolvePepTalks(shared), [shared]);
   const [sequence, setSequence] = useState<string[]>([]);
 
   useEffect(() => {

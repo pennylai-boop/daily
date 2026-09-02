@@ -219,10 +219,18 @@ export interface PepTalkSettings {
   /** 頂部彈層是否顯示；點太陽會關掉，設定頁可再打開。 */
   visible: boolean;
   /**
-   * null = 使用內建預設清單；有值 = 使用者編輯過的完整清單
-   * （新增／修改／刪除後就寫進來，之後以這份為準）。
+   * 舊版本機自訂清單，不再使用。金句改為系統預設＋全站共享的 `sharedPepTalks`。
    */
   quotes: string[] | null;
+}
+
+/** 使用者新增、全站共享的打氣小語。只有作者能刪。 */
+export interface SharedPepTalk {
+  id: string;
+  text: string;
+  userId: string;
+  authorName: string;
+  createdAt: string;
 }
 
 export interface AppSettings {
@@ -292,6 +300,32 @@ export interface SharedJournal {
  */
 export type PeriodGoalMap = Record<string, FocusItem[]>;
 
+/** 專心模式的一筆已結束時段。進行中的倒數另外記在 `FocusState.runningStartedAt`。 */
+export interface FocusSession {
+  id: string;
+  date: IsoDate;
+  plannedMinutes: number;
+  elapsedSeconds: number;
+  startedAt: string;
+  endedAt: string;
+  /** 倒數走完為 true；中途結束為 false。 */
+  completed: boolean;
+}
+
+export interface FocusState {
+  pomodoroMinutes: number;
+  runningStartedAt: string | null;
+  runningPlannedMinutes: number;
+  sessions: FocusSession[];
+}
+
+export const DEFAULT_FOCUS: FocusState = {
+  pomodoroMinutes: 25,
+  runningStartedAt: null,
+  runningPlannedMinutes: 25,
+  sessions: [],
+};
+
 export interface DailyState {
   version: number;
   entries: Record<IsoDate, DayEntry>;
@@ -307,6 +341,9 @@ export interface DailyState {
   settings: AppSettings;
   sharedWithMe: SharedJournal[];
   divination: DivinationState;
+  focus: FocusState;
+  /** 大家新增的打氣小語（不含系統預設）。離線時用上次拉到的快取。 */
+  sharedPepTalks: SharedPepTalk[];
 }
 
 export type ThemePreference = "light" | "dark" | "system";

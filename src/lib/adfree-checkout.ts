@@ -1,29 +1,38 @@
 /**
- * 開始一筆無廣告訂閱：建單之後把瀏覽器 form post 去 PAYUNi。
+ * 開始無廣告每月自動續約：建單之後把瀏覽器 form post 去 PAYUNi 續期收款頁。
  * 金額由伺服器寫死 NT$50，前端改不了。
  */
 
 import type { InvoiceErrors, InvoiceInput } from "./invoice";
 import { postToGateway } from "./payment-form";
-import type { SponsorMethod } from "./support";
-import { getSupabaseBrowser } from "./supabase-browser";
+import { sessionAccessToken, sessionEmail } from "./session-token";
 
 export interface CheckoutFailure {
   error: string;
   invoiceErrors?: InvoiceErrors;
 }
 
-export async function startAdFreeCheckout(input: {
-  email: string;
-  method?: SponsorMethod;
+let inflight: Promise<CheckoutFailure | null> | null = null;
+
+export async function startAdFreeCheckout(input?: {
+  email?: string;
   invoice?: InvoiceInput;
 }): Promise<CheckoutFailure | null> {
-  const supabase = getSupabaseBrowser();
-  const {
-    data: { session },
-  } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
-  const accessToken = session?.access_token;
+  if (inflight) return inflight;
+  inflight = runCheckout(input).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
+async function runCheckout(input?: {
+  email?: string;
+  invoice?: InvoiceInput;
+}): Promise<CheckoutFailure | null> {
+  const accessToken = await sessionAccessToken();
   if (!accessToken) return { error: "請先用 LINE 登入，訂閱才綁得上你的帳號。" };
+
+  const email = input?.email?.trim() || (await sessionEmail()) || "";
 
   try {
     const response = await fetch("/api/adfree/checkout", {
@@ -32,7 +41,7 @@ export async function startAdFreeCheckout(input: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ email, invoice: input?.invoice }),
     });
     const data = (await response.json()) as {
       action?: string;
