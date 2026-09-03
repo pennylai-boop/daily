@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, PageHeading, TextLink } from "@/components/ui/surfaces";
-import { startAdFreeCheckout } from "@/lib/adfree-checkout";
+import {
+  fetchAdFreeSubscription,
+  startAdFreeCheckout,
+  type AdFreeSubscriptionView,
+} from "@/lib/adfree-checkout";
 import { ADFREE_AMOUNT, formatAdFreeUntil, isAdFreeActive } from "@/lib/adfree";
 import { signInWithLine } from "@/lib/line-auth";
 import { formatAmount } from "@/lib/support";
@@ -17,9 +21,21 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
   const active = isAdFreeActive(until);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [subscription, setSubscription] = useState<AdFreeSubscriptionView | null>(null);
+  // 取消過的人效期可能還沒走完，這時「已是無廣告版」不代表還在扣款，要讓他能重新訂一張。
+  const cancelled = subscription?.status === "cancelled";
+  const subscribing = active && !cancelled;
 
   useEffect(() => {
-    if (loggedIn) void refreshAdFreeStatus();
+    if (!loggedIn) return;
+    let stale = false;
+    void refreshAdFreeStatus();
+    void fetchAdFreeSubscription().then((data) => {
+      if (!stale) setSubscription(data);
+    });
+    return () => {
+      stale = true;
+    };
   }, [loggedIn]);
 
   useEffect(() => {
@@ -34,7 +50,8 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
       });
       return;
     }
-    if (active) return;
+    // 還沒問到約定狀態前先不要自動送出，否則取消過的人會被誤判成訂閱中。
+    if (subscription === null || subscribing) return;
     setBusy(true);
     void startAdFreeCheckout().then((failure) => {
       if (failure) {
@@ -42,7 +59,7 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
         setBusy(false);
       }
     });
-  }, [ready, loggedIn, paymentReady, busy, notice, active]);
+  }, [ready, loggedIn, paymentReady, busy, notice, subscription, subscribing]);
 
   const login = async () => {
     setBusy(true);
@@ -72,7 +89,9 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
 
       {ready && active && until ? (
         <p className="rounded-lg bg-accent-tint px-3.5 py-2.5 text-[13px] text-ink">
-          目前已是無廣告版，有效至 {formatAdFreeUntil(until)}。再訂一次會從原到期日接著算，並繼續每月自動扣款。
+          {cancelled
+            ? `已取消每月扣款，無廣告版仍可用到 ${formatAdFreeUntil(until)}。現在重新訂閱會從原到期日接著算。`
+            : `目前已是無廣告版，有效至 ${formatAdFreeUntil(until)}。再訂一次會從原到期日接著算，並繼續每月自動扣款。`}
         </p>
       ) : null}
 
@@ -99,8 +118,8 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
       ) : (
         <Card className="space-y-3 px-4 py-4 sm:px-5">
           <p className="text-[13px] leading-relaxed text-ink-muted">
-            {active
-              ? "你已經在訂閱中，之後每月會自動扣款。如需取消請到支持頁留言。"
+            {subscribing
+              ? "你已經在訂閱中，之後每月會自動扣款。要取消請到「設定 → 無廣告訂閱」。"
               : busy
                 ? "正在前往 PAYUNi 付款頁，請稍候…"
                 : "每月自動扣款，發票會在扣款成功後開立。"}
@@ -117,7 +136,8 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
       )}
 
       <p className="text-[13px] text-ink-subtle">
-        如需取消續約，請到 <TextLink href="/support">支持頁留言</TextLink>。
+        隨時可以在 <TextLink href="/settings#adfree">設定 → 無廣告訂閱</TextLink> 取消每月扣款；
+        已付費的天數不會消失，會用到效期結束為止。
       </p>
     </div>
   );

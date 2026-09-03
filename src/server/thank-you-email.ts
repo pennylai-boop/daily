@@ -110,6 +110,59 @@ export async function sendAdFreeReceipt(params: {
   });
 }
 
+export async function sendAdFreePaymentFailed(params: {
+  email: string;
+  name: string;
+  reason: string;
+  until: string | null;
+}): Promise<MailResult> {
+  const greeting = params.name.trim() || "朋友";
+  const untilLine = params.until
+    ? `目前已付費的效期到 ${formatAdFreeUntil(params.until)}，在那之前廣告還是關著的。`
+    : "已付費的效期還在，時間到之前廣告仍然是關著的。";
+  return sendMail({
+    to: params.email,
+    subject: `天天 daily ${ADFREE_PRODUCT_NAME}這期扣款沒有成功`,
+    text: [
+      `${greeting}，你好：`,
+      "",
+      `這個月的${ADFREE_PRODUCT_NAME}扣款沒有完成，常見原因是信用卡到期或額度不足。`,
+      `銀行回覆：${params.reason}`,
+      untilLine,
+      "",
+      "系統之後還會依原排程重試。若想換一張卡，最快的方式是到「設定 → 無廣告訂閱」",
+      "先取消目前的訂閱，再用新的卡重新訂一次；已付費的天數不會消失。",
+      "",
+      "—— 天天 daily",
+    ].join("\n"),
+  });
+}
+
+export async function sendAdFreeCancelled(params: {
+  email: string;
+  name: string;
+  until: string | null;
+}): Promise<MailResult> {
+  const greeting = params.name.trim() || "朋友";
+  const untilLine = params.until
+    ? `已付費的效期到 ${formatAdFreeUntil(params.until)}，在那之前仍然是無廣告版。`
+    : "已付費的效期走完之後，最下排的廣告會回來。";
+  return sendMail({
+    to: params.email,
+    subject: `天天 daily ${ADFREE_PRODUCT_NAME}已取消`,
+    text: [
+      `${greeting}，你好：`,
+      "",
+      `${ADFREE_PRODUCT_NAME}的每月自動扣款已經終止，之後不會再向你收費。`,
+      untilLine,
+      "",
+      "隨時都可以再訂回來，謝謝你這段時間的支持。",
+      "",
+      "—— 天天 daily",
+    ].join("\n"),
+  });
+}
+
 export async function sendCreditCode(params: {
   email: string;
   name: string;

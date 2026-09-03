@@ -337,8 +337,29 @@ LINE 登入目前只在 LINE App 內有效（`src/lib/line-auth.ts`），瀏覽�
 （信用卡每月自動扣款）。必須 LINE 登入。每期授權成功後 Notify 把
 `adfree_entitlements.expires_at` 往後加 30 天，並用 SmilePay 開發票。
 商店需在 PAYUNi 後台開通續期收款。資料庫變更見
-`supabase/migrations/20260902120000_adfree.sql` 與
-`supabase/migrations/20260902140000_adfree_period.sql`，部署前要先套到正式專案。
+`supabase/migrations/20260902120000_adfree.sql`、
+`supabase/migrations/20260902140000_adfree_period.sql` 與
+`supabase/migrations/20260903150000_adfree_subscription.sql`，部署前要先套到正式專案。
+
+**「效期」與「約定」是兩件事，程式裡刻意分開存**（`src/server/adfree.ts`）：
+`expires_at` 是已經付過錢的天數，`status`／`period_trade_no` 才是 PAYUNi 那張
+還會不會繼續扣款的約定。所以取消訂閱只終止約定，不退不收已付費的天數。
+
+| 事件 | 進來的地方 | 做的事 |
+| --- | --- | --- |
+| 每期扣款成功 | `/api/adfree/notify` | 加 30 天效期、開發票、寄收據，記下續期單號與 `NextAuthDate` |
+| 每期扣款失敗 | `/api/adfree/notify` | 效期不動，記 `last_failure_reason` 並寄信請對方換卡 |
+| 使用者取消 | `/api/adfree/cancel` | 呼叫 PAYUNi `period/mdfStatus`（`ReviseTradeStatus=end`）終止約定 |
+| 設定頁顯示 | `/api/adfree/status` | 回效期、下次扣款日、是否已取消、上期是否失敗 |
+
+下次扣款日直接存每期通知帶回的 `NextAuthDate`，不必為了顯示而去打 PAYUNi 查詢 API。
+`src/server/payuni-period-api.ts` 另外包了 `period/query`（查總期數與每期排程），
+對帳查問題時可以用。
+
+取消在「設定 → 無廣告訂閱」，`src/components/adfree-card.tsx`。PAYUNi 的約定一旦終止
+就無法重新啟用，所以「重新訂閱」是重新建立一張約定（再走一次 `/adfree`）。
+換卡也是走這條路：先取消再用新卡訂一次——`period/exchange`（卡號修改）沒有實作，
+那個機制要另外向 PAYUNi 申請核准，而且文件沒寫明回傳的變更網址欄位名稱。
 
 **價格在 `src/lib/divination-credits.ts` 的 `CREDIT_PACKS`，要調整只改那一份。**
 買得越多每點越便宜，「最划算」的標記由 `BEST_VALUE_PACK_ID` 依單價自己算出來，不用手動標。

@@ -35,9 +35,12 @@ export async function POST(request: Request) {
   return NextResponse.redirect(failed, 303);
 }
 
+/**
+ * PAYUNi 偶爾用 GET 帶人回來，這時沒有可驗證的回傳內容，
+ * 所以只把人帶回設定頁、不宣告成功——實際狀態由那一頁自己去問 /api/adfree/status。
+ */
 export async function GET(request: Request) {
   const target = new URL("/settings", new URL(request.url).origin);
-  target.searchParams.set("adfree", "ok");
   target.hash = "adfree";
   return NextResponse.redirect(target, 303);
 }

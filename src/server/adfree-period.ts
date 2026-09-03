@@ -6,7 +6,12 @@
 import { ADFREE_AMOUNT, ADFREE_PRODUCT_NAME } from "@/lib/adfree";
 import { createInvoiceInput } from "@/lib/invoice";
 import { createSponsorInput } from "@/lib/support";
-import { extendAdFree, getAdFreeUntil } from "@/server/adfree";
+import {
+  extendAdFree,
+  getAdFreeUntil,
+  recordAdFreeCharge,
+  recordAdFreeFailure,
+} from "@/server/adfree";
 import { type PeriodCallback } from "@/server/payuni";
 import { issueInvoice } from "@/server/smilepay-invoice";
 import {
@@ -16,13 +21,11 @@ import {
   updateOrder,
   type SponsorOrder,
 } from "@/server/support-orders";
-import { sendAdFreeReceipt } from "@/server/thank-you-email";
+import { sendAdFreePaymentFailed, sendAdFreeReceipt } from "@/server/thank-you-email";
 
 export async function processAdFreePeriodPayment(callback: PeriodCallback): Promise<void> {
   if (callback.status !== "SUCCESS") {
-    console.info(
-      `[adfree] 續期授權未成功 mer=${callback.merTradeNo} period=${callback.periodOrderNo} status=${callback.status}`,
-    );
+    await handleFailedPeriodCharge(callback);
     return;
   }
 
@@ -116,6 +119,74 @@ export async function processAdFreePeriodPayment(callback: PeriodCallback): Prom
   if (paid) await fulfillAdFreeOrder(paid, callback);
 }
 
+/**
+ * 這一期沒扣成功（多半是卡片過期或額度不足）。
+ *
+ * 效期不動：使用者已經付過的天數還在，等 expires_at 過了廣告自然會回來。
+ * 這裡只做兩件事——把失敗記在權益上讓設定頁能提醒，以及寄信請對方處理。
+ * PAYUNi 之後仍會按排程重試，成功時 recordAdFreeCharge 會清掉這個狀態。
+ */
+async function handleFailedPeriodCharge(callback: PeriodCallback): Promise<void> {
+  const reason = callback.message || callback.status || "扣款失敗";
+  console.warn(
+    `[adfree] 續期授權未成功 mer=${callback.merTradeNo} period=${callback.periodOrderNo} status=${callback.status} msg=${callback.message}`,
+  );
+
+  const parent = await getOrder(callback.merTradeNo);
+  if (!parent || parent.product !== "adfree") return;
+
+  // 首期的失敗記在原訂單上，續期記在該期自己的訂單上。
+  const periodRow = callback.periodOrderNo
+    ? await getOrderByPeriodOrderNo(callback.periodOrderNo)
+    : undefined;
+  const target = periodRow ?? (callback.thisPeriod <= 1 ? parent : undefined);
+
+  // 同一期重送通知（或 PAYUNi 重試又失敗）時不要重複記帳、重複寄信。
+  if (target?.status === "failed") return;
+
+  if (target) {
+    await updateOrder(target.merTradeNo, { status: "failed", thankYouError: reason });
+  } else if (callback.periodOrderNo) {
+    try {
+      await createOrder(
+        callback.periodOrderNo,
+        {
+          ...createSponsorInput(),
+          amount: parent.amount,
+          method: "credit",
+          email: parent.email,
+          name: parent.name,
+        },
+        {
+          product: "adfree",
+          credits: 0,
+          invoice: parent.invoice,
+          userId: parent.userId,
+          periodTradeNo: callback.periodTradeNo,
+          periodOrderNo: callback.periodOrderNo,
+          thisPeriod: callback.thisPeriod,
+        },
+      );
+      await updateOrder(callback.periodOrderNo, { status: "failed", thankYouError: reason });
+    } catch (error) {
+      console.error("[adfree] 建立失敗的續期訂單紀錄失敗：", error);
+    }
+  }
+
+  if (parent.userId) await recordAdFreeFailure(parent.userId, reason);
+
+  const email = parent.email || callback.payerEmail;
+  if (!email) return;
+
+  const mail = await sendAdFreePaymentFailed({
+    email,
+    name: parent.name || callback.payerName,
+    reason,
+    until: parent.userId ? await getAdFreeUntil(parent.userId) : null,
+  });
+  if (!mail.ok) console.error("[adfree] 扣款失敗通知信寄送失敗：", mail.message);
+}
+
 async function fulfillAdFreeOrder(order: SponsorOrder, callback: PeriodCallback): Promise<void> {
   const email = order.email || callback.payerEmail;
   const name = order.name || callback.payerName;
@@ -124,11 +195,31 @@ async function fulfillAdFreeOrder(order: SponsorOrder, callback: PeriodCallback)
     if (patched) order = patched;
   }
 
+  // 這一期先前失敗、PAYUNi 重試成功時，訂單還掛在 failed，要改回已付款才不會誤導付款紀錄。
+  if (order.status !== "paid") {
+    const patched = await updateOrder(order.merTradeNo, {
+      status: "paid",
+      tradeNo: callback.tradeNo || order.tradeNo,
+      paidAt: order.paidAt ?? Date.now(),
+      thankYouError: undefined,
+    });
+    if (patched) order = patched;
+  }
+
   await issueAdFreeInvoice(order, email);
   const granted = await grantAdFree(order, email, callback);
   if (!granted.ok) {
     await updateOrder(order.merTradeNo, { thankYouError: granted.message });
     return;
+  }
+
+  // 扣款成功就代表約定是活的：記下續期單號與下次扣款日，並清掉上一次的失敗紀錄。
+  if (order.userId) {
+    await recordAdFreeCharge({
+      userId: order.userId,
+      periodTradeNo: callback.periodTradeNo || order.periodTradeNo || null,
+      nextAuthDate: callback.nextAuthDate || null,
+    });
   }
 
   if (order.thankYouSentAt) return;

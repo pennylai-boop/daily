@@ -72,3 +72,52 @@ export async function fetchAdFreeUntil(accessToken: string): Promise<string | nu
   const data = (await response.json()) as { until?: string | null };
   return typeof data.until === "string" ? data.until : null;
 }
+
+export interface AdFreeSubscriptionView {
+  until: string | null;
+  status: "active" | "cancelled";
+  nextChargeAt: string | null;
+  cancelledAt: string | null;
+  lastFailureAt: string | null;
+  lastFailureReason: string | null;
+  cancellable: boolean;
+}
+
+/** 設定頁用：除了效期還要知道約定狀態，才能顯示下次扣款日與取消按鈕。 */
+export async function fetchAdFreeSubscription(): Promise<AdFreeSubscriptionView | null> {
+  const accessToken = await sessionAccessToken();
+  if (!accessToken) return null;
+
+  try {
+    const response = await fetch("/api/adfree/status", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as AdFreeSubscriptionView;
+  } catch {
+    return null;
+  }
+}
+
+export async function cancelAdFree(): Promise<{ ok: true; until: string | null } | { ok: false; error: string }> {
+  const accessToken = await sessionAccessToken();
+  if (!accessToken) return { ok: false, error: "請先用 LINE 登入。" };
+
+  try {
+    const response = await fetch("/api/adfree/cancel", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = (await response.json()) as {
+      ok?: boolean;
+      until?: string | null;
+      error?: string;
+    };
+    if (!response.ok || !data.ok) {
+      return { ok: false, error: data.error ?? "取消失敗，請稍後再試。" };
+    }
+    return { ok: true, until: data.until ?? null };
+  } catch {
+    return { ok: false, error: "連線失敗，請確認網路後再試一次。" };
+  }
+}
