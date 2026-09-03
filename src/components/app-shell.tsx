@@ -124,6 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // LINE 選人頁只要跳出選人畫面再回網頁，不要載入天天的側欄與廣告。
+  if (pathname.startsWith("/line-pick")) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col" data-ads={showAds ? "on" : "off"}>
       <AuthLocalhostBounce />

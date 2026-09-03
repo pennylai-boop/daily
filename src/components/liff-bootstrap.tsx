@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { ensureLiff, liffId } from "@/lib/liff";
-import { LINE_INVITE_QUERY, LINE_PICK_QUERY } from "@/lib/line-invite";
+import { LINE_HANDOFF_QUERY, LINE_INVITE_QUERY, LINE_PICK_QUERY } from "@/lib/line-invite";
 
 /**
  * 在 LINE 裡開啟、或剛從 LINE 登入導回來時，先把 LIFF 準備好。
@@ -19,9 +19,14 @@ export function LiffBootstrap() {
     if (!liffId()) return;
 
     const params = new URLSearchParams(window.location.search);
-    const fromLinePicker =
-      params.get(LINE_PICK_QUERY) === "1" || params.get(LINE_INVITE_QUERY) === "1";
-    if (fromLinePicker && !window.location.pathname.startsWith("/settings")) {
+    const fromLinePicker = params.get(LINE_PICK_QUERY) === "1" || params.has(LINE_HANDOFF_QUERY);
+    if (fromLinePicker && !window.location.pathname.startsWith("/line-pick")) {
+      window.location.replace(`/line-pick?${params.toString()}`);
+      return;
+    }
+
+    const fromLineInvite = params.get(LINE_INVITE_QUERY) === "1";
+    if (fromLineInvite && !window.location.pathname.startsWith("/settings")) {
       window.location.replace(`/settings?${params.toString()}`);
       return;
     }

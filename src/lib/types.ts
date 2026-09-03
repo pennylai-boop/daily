@@ -194,7 +194,7 @@ export interface ShareRecipient {
  * 常用的 LINE 群組或好友。
  *
  * 新增時用 LIFF shareTargetPicker 打開 LINE 的好友／群組／聊天室列表。
- * LINE 不會回傳選到誰，所以本機只記顯示名稱，傳送時再開一次選擇畫面。
+ * LINE 不會回傳選到誰或名稱，所以無法自動帶出 LINE 上的群組／好友名字。
  */
 export interface LineShareTarget {
   id: string;

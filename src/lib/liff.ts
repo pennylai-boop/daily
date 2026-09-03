@@ -29,6 +29,8 @@ export interface LiffLike {
     messages: unknown[],
     options?: { isMultiple?: boolean },
   ) => Promise<{ status: string } | null>;
+  openWindow?: (params: { url: string; external?: boolean }) => void;
+  closeWindow?: () => void;
 }
 
 declare global {

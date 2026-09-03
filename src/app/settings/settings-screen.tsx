@@ -15,8 +15,9 @@ import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account"
 import { AdFreeCard } from "@/components/adfree-card";
 import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
-import { copyInviteUrl, LINE_INVITE_QUERY, LINE_PICK_QUERY, pickLineChat, shareInvite } from "@/lib/line-invite";
+import { copyInviteUrl, LINE_INVITE_QUERY, LINE_PICK_QUERY, LINE_PICKED_QUERY, shareInvite } from "@/lib/line-invite";
 import { sessionAccessToken } from "@/lib/session-token";
+import { hasSession } from "@/lib/supabase-sync";
 import { isShareId } from "@/lib/storage";
 import { prepareDayImage, revokePreparedImage, type PreparedDayImage } from "@/lib/share-image";
 import { signInWithLine } from "@/lib/line-auth";
@@ -399,9 +400,8 @@ function LegalLinks() {
 /**
  * 常傳的 LINE 群組／對象清單。
  *
- * 按新增會打開 LINE 的好友、群組與聊天室列表。選完後本機只記顯示名稱，
- * 因為 LINE 基於隱私不會把選到的聊天室身分回給網頁。
- * 跳去 LINE 之前先寫進本機與雲端，回到網頁版才不會不見。
+ * 按新增會帶著網頁帳號的短效憑證打開 LINE 選人。選完寫回這個帳號並跳回網頁，
+ * LINE 裡的天天不必登入。LINE 不會回傳聊天室名稱。
  */
 function clearLineInviteQuery() {
   if (typeof window === "undefined") return;
@@ -413,20 +413,9 @@ function clearLineInviteQuery() {
   window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
 }
 
-function clearLinePickQuery() {
-  if (typeof window === "undefined") return;
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has(LINE_PICK_QUERY) && !params.has("label")) return;
-  params.delete(LINE_PICK_QUERY);
-  params.delete("label");
-  const search = params.toString();
-  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-}
-
 function ShareTargetsCard() {
   const store = useDailyStore();
   const { targets } = store.state.settings.line;
-  const [name, setName] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -434,55 +423,63 @@ function ShareTargetsCard() {
   const [shareOpen, setShareOpen] = useState(false);
   const shareImageRef = useRef<PreparedDayImage | null>(null);
   shareImageRef.current = shareImage;
-  const autoPicked = useRef(false);
 
-  const addFromLine = async (presetName?: string, fromLiffReturn = false) => {
+  const addFromLine = async () => {
     setPicking(true);
     setNote(null);
-    const label = (presetName ?? name).trim().slice(0, 30);
-    const used = new Set(targets.map((target) => target.name));
-    let next = label;
-    if (!next) {
-      let index = 1;
-      while (used.has(`群組 ${index}`)) index += 1;
-      next = `群組 ${index}`;
-    }
 
-    // 先存再打開 LINE：網頁版跳走之後 localStorage 已經有這筆，回來才看得到。
-    await store.addLineTarget(next);
-    setName("");
-
-    const result = await pickLineChat(next, { fromLiffReturn });
-    setPicking(false);
-
-    if (result === "redirect") {
-      setNote(`已記住「${next}」，正在打開 LINE。可選好友、群組或聊天室。`);
-      return;
-    }
-    clearLinePickQuery();
-    if (result === "cancelled") {
-      setNote(`「${next}」已在名單裡。可再到 LINE 選一次群組或好友。`);
-      return;
-    }
-    if (result === "unavailable") {
-      setNote("打不開 LINE 的列表。請確認已安裝 LINE，或到 LINE Developers 把這個 LIFF 的「分享對象選擇」打開。");
+    const access = await sessionAccessToken();
+    if (!access) {
+      setPicking(false);
+      setNote("請先用 LINE 登入，選好的對象才會回到這個帳號。");
       return;
     }
 
-    await store.addLineTarget(next);
-    setNote(`已加入「${next}」。可再按新增繼續選好友或群組。`);
+    try {
+      const response = await fetch("/api/line-pick/start", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access}` },
+      });
+      const data = (await response.json()) as { liffUrl?: string; error?: string };
+      if (!response.ok || !data.liffUrl) {
+        setNote(data.error ?? "無法開啟 LINE。");
+        return;
+      }
+      setNote("正在打開 LINE，選完會回到這個網頁。");
+      window.location.assign(data.liffUrl);
+    } catch {
+      setNote("無法開啟 LINE，請再試一次。");
+    } finally {
+      setPicking(false);
+    }
   };
 
   useEffect(() => {
-    if (autoPicked.current || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get(LINE_PICK_QUERY) !== "1") return;
-    autoPicked.current = true;
-    const label = params.get("label") ?? "";
-    if (label) setName(label);
-    void addFromLine(label, true);
-    // 只在從 LIFF 深連結回來時跑一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (params.get(LINE_PICK_QUERY) === "1") {
+      window.location.replace(`/line-pick?${params.toString()}`);
+      return;
+    }
+    if (params.get(LINE_PICKED_QUERY) !== "1" && params.get(LINE_PICKED_QUERY) !== "0") return;
+    const ok = params.get(LINE_PICKED_QUERY) === "1";
+    params.delete(LINE_PICKED_QUERY);
+    const search = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    void (async () => {
+      for (let i = 0; i < 12; i += 1) {
+        if (hasSession()) {
+          await refreshLineTargets();
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      setNote(
+        ok
+          ? "已加回這個帳號。LINE 不會回傳群組或好友名稱，之後按傳送今天會再開一次列表。"
+          : "沒有選成，已回到網頁。",
+      );
+    })();
   }, []);
 
   useEffect(() => {
@@ -534,25 +531,10 @@ function ShareTargetsCard() {
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="常傳的 LINE 對象"
-        description="按新增會打開 LINE，可選好友、群組或聊天室。顯示名稱可先填方便辨認；名單會自動存下來，回到網頁版也還在。傳送今天會先預覽，再下載或發送。"
+        description="按新增會打開 LINE 選好友、群組或聊天室。選完會寫回這個網頁帳號並跳回來，LINE 裡不必再登入天天。LINE 不會回傳聊天室名稱。傳送今天會先預覽，再下載或發送。"
       />
 
-      <div className="mt-4 flex flex-wrap items-end gap-2">
-        <TextInput
-          id="line-target-name"
-          value={name}
-          maxLength={30}
-          aria-label="顯示名稱"
-          placeholder="選填顯示名稱，例如：家人群、工作群"
-          className="min-w-48 flex-1"
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void addFromLine();
-            }
-          }}
-        />
+      <div className="mt-4">
         <Button variant="secondary" disabled={picking} onClick={() => void addFromLine()}>
           {picking ? "開啟 LINE…" : "新增"}
         </Button>

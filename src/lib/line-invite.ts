@@ -84,55 +84,9 @@ export async function copyInviteUrl(code: string): Promise<void> {
   await copyText(inviteUrl(code));
 }
 
-export type LinePickResult = "line" | "unavailable" | "cancelled" | "redirect";
-
 export const LINE_PICK_QUERY = "pickLine";
-
-/**
- * 打開 LINE 原生的好友／群組列表讓使用者選一個聊天室。
- * LINE 基於隱私不會回傳選到誰，選完會送出一則短訊到該聊天室，我們再把顯示名稱記在本機。
- * 在一般瀏覽器會先跳進 LINE 的 LIFF，進 App 後再自動跳出選人畫面。
- */
-export async function pickLineChat(
-  displayName = "",
-  options: { fromLiffReturn?: boolean } = {},
-): Promise<LinePickResult> {
-  const liff = await ensureLiff();
-  const canPick = Boolean(liff?.isApiAvailable("shareTargetPicker"));
-  const alreadyInLiff = Boolean(liff?.isInClient?.());
-  const returningToPick =
-    options.fromLiffReturn || new URLSearchParams(window.location.search).get(LINE_PICK_QUERY) === "1";
-
-  if (!canPick) {
-    if (alreadyInLiff || returningToPick) return "unavailable";
-    const opened = openLiffInLine({
-      [LINE_PICK_QUERY]: "1",
-      ...(displayName.trim() ? { label: displayName.trim().slice(0, 30) } : {}),
-    });
-    return opened ? "redirect" : "unavailable";
-  }
-
-  if (!liff!.isLoggedIn()) {
-    liff!.login({ redirectUri: window.location.href });
-    return "redirect";
-  }
-
-  try {
-    const result = await liff!.shareTargetPicker(
-      [
-        {
-          type: "text",
-          text: "已把這個聊天室加入天天 daily 的常傳名單。之後日記頁按「傳送今天」就會傳到這裡。",
-        },
-      ],
-      // false 只會出現好友；true 才看得到群組與聊天室。
-      { isMultiple: true },
-    );
-    return result ? "line" : "cancelled";
-  } catch {
-    return "unavailable";
-  }
-}
+export const LINE_HANDOFF_QUERY = "handoff";
+export const LINE_PICKED_QUERY = "picked";
 
 /**
  * Android WebView 常常沒有 navigator.clipboard（需要 HTTPS 與額外權限），
