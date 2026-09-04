@@ -52,12 +52,14 @@
 }
 
 [data-ads="on"] {
-  --ad-bar-h: 3.25rem;
+  /* 手機廣告列對齊底欄按鈕高度（66px），AdSense 不得再往上撐。 */
+  --ad-bar-h: 66px;
   --ad-bar-offset: calc(66px + env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 64rem) {
   [data-ads="on"] {
+    --ad-bar-h: 3.25rem;
     --ad-bar-offset: 0px;
   }
 }

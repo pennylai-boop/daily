@@ -9,17 +9,18 @@ import { adsenseConfig } from "@/lib/adfree";
 /**
  * 全站最下排的廣告列。訂閱無廣告後由 AppShell 整塊不渲染。
  * iOS App 內用 hide-in-ios-app 藏起來（App Store 規則，與贊助同一套）。
+ * 手機高度上限 66px，對齊底欄按鈕，避免 AdSense 把區塊撐高。
  */
 export function AdBanner() {
   const ads = adsenseConfig();
 
   return (
     <aside
-      className="hide-in-ios-app fixed inset-x-0 z-30 bg-surface pb-[env(safe-area-inset-bottom,0px)] lg:pb-0"
+      className="hide-in-ios-app fixed inset-x-0 z-30 h-[var(--ad-bar-h)] max-h-[66px] overflow-hidden bg-surface lg:max-h-none"
       style={{ bottom: "var(--ad-bar-offset, 0px)" }}
       aria-label="廣告"
     >
-      <div className="relative w-full">
+      <div className="relative h-full w-full">
         {ads ? <AdSenseUnit client={ads.client} slot={ads.slot} /> : <AdPlaceholder />}
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 px-2 pt-1">
           <p className="rounded bg-surface/80 px-1.5 py-0.5 text-[11px] tracking-wide text-ink-subtle">
@@ -46,7 +47,7 @@ export function AdBanner() {
 
 function AdPlaceholder() {
   return (
-    <div className="flex h-[50px] w-full items-center justify-center bg-surface-muted text-[12px] text-ink-subtle">
+    <div className="flex h-full w-full items-center justify-center bg-surface-muted text-[12px] text-ink-subtle">
       廣告位置（尚未設定 AdSense）
     </div>
   );
@@ -69,12 +70,11 @@ function AdSenseUnit({ client, slot }: { client: string; slot: string }) {
 
   return (
     <ins
-      className="adsbygoogle block"
-      style={{ display: "block", width: "100%", minHeight: 50 }}
+      className="adsbygoogle block h-full w-full overflow-hidden"
+      style={{ display: "block", width: "100%", height: "100%" }}
       data-ad-client={client}
       data-ad-slot={slot}
       data-ad-format="horizontal"
-      data-full-width-responsive="true"
     />
   );
 }
