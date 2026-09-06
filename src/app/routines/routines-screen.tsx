@@ -163,6 +163,7 @@ export function RoutinesScreen() {
               metricFields: editing.metricFields,
               timerDefaults: editing.timerDefaults,
               archived: editing.archived,
+              shared: editing.shared !== false,
             }}
             onCancel={() => setMode({ kind: "closed" })}
             onSubmit={(draft) => {
@@ -388,6 +389,7 @@ function RoutineRow({
                 {doneToday ? "今天已完成" : "今天要做"}
               </Chip>
             ) : null}
+            {routine.shared === false ? <Chip>擷圖隱藏</Chip> : null}
             <span className="text-[13px] text-ink-muted">
               {describeFrequency(routine.frequency)}
               {routine.note ? `・${routine.note}` : ""}

@@ -41,8 +41,9 @@ export const THEME_KEY = "daily.theme";
  * 12：卜卦紀錄可以自己加附註。
  * 13：專心模式（番茄鐘與已完成時長）。
  * 14：打氣小語改為系統預設＋全站共享新增。
+ * 15：每日目標可各自設定是否出現在分享擷圖。
  */
-export const STORE_VERSION = 14;
+export const STORE_VERSION = 15;
 
 /** 卜卦：三個月一輪的免費額度，還沒卜過的人第一次就是免費。 */
 export const EMPTY_DIVINATION: DivinationState = {
@@ -450,6 +451,7 @@ function withTemplate(routine: Routine): Routine {
     template: (routine.template ?? null) as TemplateId | null,
     metricFields: normalizeMetricFields(routine.metricFields),
     timerDefaults: normalizeTimerDefaults(routine.timerDefaults),
+    shared: routine.shared !== false,
     updatedAt: typeof routine.updatedAt === "string" ? routine.updatedAt : routine.createdAt,
   };
 }

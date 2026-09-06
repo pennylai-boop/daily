@@ -89,6 +89,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "daily" },
     template: "diary",
     archived: false,
+    shared: true,
   },
   {
     title: "五感恩",
@@ -97,6 +98,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "daily" },
     template: "gratitude",
     archived: false,
+    shared: true,
   },
   {
     title: "觀心書",
@@ -105,6 +107,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "weekly", weekdays: [0, 3] },
     template: "mindfulness",
     archived: false,
+    shared: true,
   },
   {
     title: "靜坐十分鐘",
@@ -113,6 +116,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "daily" },
     template: null,
     archived: false,
+    shared: true,
   },
   {
     title: "喝滿 2000ml 水",
@@ -121,6 +125,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "daily" },
     template: null,
     archived: false,
+    shared: true,
   },
   {
     title: "重量訓練",
@@ -129,6 +134,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "weekly", weekdays: [1, 3, 5] },
     template: null,
     archived: false,
+    shared: true,
   },
   {
     title: "閱讀 20 頁",
@@ -137,6 +143,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "weekly", weekdays: [0, 2, 4, 6] },
     template: null,
     archived: false,
+    shared: true,
   },
   {
     title: "月初記帳盤點",
@@ -145,6 +152,7 @@ const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
     frequency: { kind: "monthly", days: [1] },
     template: null,
     archived: false,
+    shared: true,
   },
 ];
 

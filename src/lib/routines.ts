@@ -31,6 +31,7 @@ export const DEFAULT_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[]
     frequency: { kind: "daily" },
     template: "gratitude",
     archived: false,
+    shared: true,
   },
   {
     title: "觀心書",
@@ -39,6 +40,7 @@ export const DEFAULT_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[]
     frequency: { kind: "weekly", weekdays: [0, 3] },
     template: "mindfulness",
     archived: false,
+    shared: true,
   },
   {
     title: "寫日記",
@@ -47,8 +49,14 @@ export const DEFAULT_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[]
     frequency: { kind: "daily" },
     template: "diary",
     archived: false,
+    shared: true,
   },
 ];
+
+/** 舊資料沒有 `shared` 時視為要出現在擷圖裡。 */
+export function isRoutineShared(routine: Pick<Routine, "shared"> | undefined | null): boolean {
+  return routine?.shared !== false;
+}
 
 export function isRoutineDueOn(routine: Routine, iso: IsoDate): boolean {
   const { frequency } = routine;

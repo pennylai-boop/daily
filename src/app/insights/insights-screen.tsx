@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { PeriodGoalsStatus } from "@/components/insights/period-goals-status";
 import { LineChart } from "@/components/charts/line-chart";
+import { Select } from "@/components/ui/field";
 import { RangeTabs } from "@/components/ui/range-tabs";
 import {
   Card,
@@ -16,14 +17,16 @@ import {
 import { todayIso } from "@/lib/date";
 import {
   buildRangeWindow,
-  metricSeries,
+  metricCompareSeries,
   moodSeries,
   RANGE_OPTIONS,
-  routineRateSeries,
+  routineInsightChart,
   timerMinutesSeries,
   focusMinutesSeries,
+  type Bucket,
   type RangeId,
 } from "@/lib/series";
+import type { DailyState, Routine } from "@/lib/types";
 import {
   currentStreak,
   longestStreak,
@@ -97,22 +100,21 @@ export function InsightsScreen() {
         ariaLabel="統計區間"
       />
 
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="定期事項完成率比較"
-          description={`${rangeLabel}內每個事項的完成率，只計算該做的日子`}
+      {activeRoutines.length > 0 ? (
+        <RoutineTrendCard
+          state={state}
+          buckets={window.buckets}
+          routines={activeRoutines}
+          rangeLabel={rangeLabel}
         />
-        <div className="mt-4">
-          <LineChart
-            labels={window.buckets.map((bucket) => bucket.label)}
-            series={routineRateSeries(state, window.buckets, activeRoutines)}
-            yMax={100}
-            yTicks={4}
-            formatValue={(value) => `${Math.round(value)}%`}
-            emptyHint="這段期間沒有排定的定期事項。"
-          />
-        </div>
-      </Card>
+      ) : null}
+
+      <MetricCompareCard
+        state={state}
+        buckets={window.buckets}
+        routines={activeRoutines}
+        rangeLabel={rangeLabel}
+      />
 
       <PeriodGoalsStatus state={state} today={today} />
 
@@ -149,28 +151,6 @@ export function InsightsScreen() {
           </Card>
         ))}
 
-      {activeRoutines
-        .filter((routine) => routine.template === "metric")
-        .map((routine) => {
-          const series = metricSeries(state, window.buckets, routine);
-          return (
-            <Card key={routine.id} className="px-4 py-4 sm:px-5">
-              <SectionHeading
-                title={`${routine.emoji} ${routine.title}`}
-                description={`${rangeLabel}的數值變化`}
-              />
-              <div className="mt-4">
-                <LineChart
-                  labels={window.buckets.map((bucket) => bucket.label)}
-                  series={series}
-                  formatValue={(value) => String(Math.round(value * 100) / 100)}
-                  emptyHint="這段期間還沒有填寫紀錄。"
-                />
-              </div>
-            </Card>
-          );
-        })}
-
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading
           title="心情趨勢"
@@ -189,5 +169,128 @@ export function InsightsScreen() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function RoutineTrendCard({
+  state,
+  buckets,
+  routines,
+  rangeLabel,
+}: {
+  state: DailyState;
+  buckets: Bucket[];
+  routines: Routine[];
+  rangeLabel: string;
+}) {
+  const [selectedId, setSelectedId] = useState("rate");
+  const chart = routineInsightChart(state, buckets, routines, selectedId, rangeLabel);
+
+  return (
+    <Card className="px-4 py-4 sm:px-5">
+      <SectionHeading
+        title="定期事項趨勢"
+        description={chart.description}
+        action={
+          <Select
+            aria-label="選擇要檢視的定期事項"
+            className="w-[min(12.5rem,58vw)] sm:w-52"
+            value={routines.some((routine) => routine.id === selectedId) || selectedId === "rate" ? selectedId : "rate"}
+            onChange={(event) => setSelectedId(event.target.value)}
+          >
+            <option value="rate">完成率（全部）</option>
+            {routines.map((routine) => (
+              <option key={routine.id} value={routine.id}>
+                {routine.emoji} {routine.title}
+              </option>
+            ))}
+          </Select>
+        }
+      />
+      <div className="mt-4">
+        <LineChart
+          labels={buckets.map((bucket) => bucket.label)}
+          series={chart.series}
+          yMin={chart.yMin}
+          yMax={chart.yMax}
+          yTicks={chart.yTicks}
+          formatValue={chart.formatValue}
+          emptyHint={chart.emptyHint}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function MetricCompareCard({
+  state,
+  buckets,
+  routines,
+  rangeLabel,
+}: {
+  state: DailyState;
+  buckets: Bucket[];
+  routines: Routine[];
+  rangeLabel: string;
+}) {
+  const series = useMemo(
+    () => metricCompareSeries(state, buckets, routines),
+    [state, buckets, routines],
+  );
+  const [picked, setPicked] = useState<string[] | null>(null);
+
+  if (series.length === 0) return null;
+
+  const visibleIds = picked ?? series.map((item) => item.id);
+  const visible = series.filter((item) => visibleIds.includes(item.id));
+
+  const toggle = (id: string) => {
+    const current = picked ?? series.map((item) => item.id);
+    setPicked(
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  };
+
+  return (
+    <Card className="px-4 py-4 sm:px-5">
+      <SectionHeading
+        title="紀錄比較"
+        description={`${rangeLabel}內可同時疊多個數值欄位，方便對照體重、腰圍這類尺寸。`}
+      />
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {series.map((item) => {
+          const on = visibleIds.includes(item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(item.id)}
+              className={
+                on
+                  ? "inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent-tint px-2.5 py-1 text-xs font-medium text-accent"
+                  : "inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted"
+              }
+            >
+              <span
+                aria-hidden
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: on ? item.color : "var(--line-strong)" }}
+              />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-4">
+        <LineChart
+          labels={buckets.map((bucket) => bucket.label)}
+          series={visible}
+          formatValue={(value) => String(Math.round(value * 100) / 100)}
+          emptyHint="先選一個以上的欄位，或這段期間還沒有填寫紀錄。"
+          showLegend={false}
+        />
+      </div>
+    </Card>
   );
 }

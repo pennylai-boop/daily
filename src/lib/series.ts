@@ -12,7 +12,13 @@ import {
 } from "./date";
 import { findMood } from "./moods";
 import { isRoutineDueOn } from "./routines";
-import { countWords, parseMetricNumber, TEMPLATES, timerElapsedSeconds } from "./templates";
+import {
+  countWords,
+  getTemplate,
+  parseMetricNumber,
+  TEMPLATES,
+  timerElapsedSeconds,
+} from "./templates";
 import type { DailyState, IsoDate, Routine } from "./types";
 
 export type RangeId = "1w" | "2w" | "1m" | "1q" | "6m" | "1y" | "3y" | "all";
@@ -277,6 +283,110 @@ export function focusMinutesSeries(state: DailyState, buckets: Bucket[]): ChartS
       }),
     },
   ];
+}
+
+export interface InsightChart {
+  series: ChartSeries[];
+  yMin?: number;
+  yMax?: number;
+  yTicks?: number;
+  formatValue: (value: number) => string;
+  emptyHint: string;
+  description: string;
+}
+
+/** 回顧頁下拉：完成率（全部疊在一起）或單一事項依內容選單位。 */
+export function routineInsightChart(
+  state: DailyState,
+  buckets: Bucket[],
+  routines: Routine[],
+  selectedId: string,
+  rangeLabel: string,
+): InsightChart {
+  if (selectedId === "rate" || !selectedId) {
+    return {
+      series: routineRateSeries(state, buckets, routines),
+      yMin: 0,
+      yMax: 100,
+      yTicks: 4,
+      formatValue: (value) => `${Math.round(value)}%`,
+      emptyHint: "這段期間沒有排定的定期事項。",
+      description: `${rangeLabel}內每個事項的完成率，只計算該做的日子`,
+    };
+  }
+
+  const routine = routines.find((item) => item.id === selectedId);
+  if (!routine) {
+    return {
+      series: [],
+      formatValue: (value) => `${Math.round(value)}`,
+      emptyHint: "找不到這個事項。",
+      description: rangeLabel,
+    };
+  }
+
+  if (!routine.template) {
+    return {
+      series: routineRateSeries(state, buckets, [routine]),
+      yMin: 0,
+      yMax: 100,
+      yTicks: 4,
+      formatValue: (value) => `${Math.round(value)}%`,
+      emptyHint: "這段期間沒有排定這個事項。",
+      description: `${rangeLabel}內「${routine.title}」的完成率，只計算該做的日子`,
+    };
+  }
+
+  const meta = getTemplate(routine.template);
+  if (meta.kind === "writing") {
+    return {
+      series: routineWordSeries(state, buckets, routine),
+      yMin: 0,
+      formatValue: (value) => `${Math.round(value)} 字`,
+      emptyHint: "這段期間還沒有寫下內容。",
+      description: `${rangeLabel}內「${routine.title}」寫下的字數`,
+    };
+  }
+
+  if (routine.template === "timer") {
+    return {
+      series: timerMinutesSeries(state, buckets, routine),
+      yMin: 0,
+      formatValue: (value) => `${Math.round(value * 10) / 10} 分`,
+      emptyHint: "這段期間還沒有計時紀錄。",
+      description: `${rangeLabel}內「${routine.title}」累積的分鐘數`,
+    };
+  }
+
+  return {
+    series: metricSeries(state, buckets, routine),
+    formatValue: (value) => String(Math.round(value * 100) / 100),
+    emptyHint: "這段期間還沒有填寫紀錄。",
+    description: `${rangeLabel}內「${routine.title}」各項目的數值`,
+  };
+}
+
+/** 所有紀錄事項的欄位攤成可疊在同一張圖上的曲線。 */
+export function metricCompareSeries(
+  state: DailyState,
+  buckets: Bucket[],
+  routines: Routine[],
+): ChartSeries[] {
+  const metricRoutines = routines.filter((routine) => routine.template === "metric");
+  const prefix = metricRoutines.length > 1;
+  const series: ChartSeries[] = [];
+
+  for (const routine of metricRoutines) {
+    for (const item of metricSeries(state, buckets, routine)) {
+      series.push({
+        ...item,
+        label: prefix ? `${routine.emoji} ${item.label}` : item.label,
+        color: SERIES_COLORS[series.length % SERIES_COLORS.length],
+      });
+    }
+  }
+
+  return series;
 }
 
 /** 心情平均分數（1–5），沒有選心情的區間為 null。 */

@@ -158,6 +158,11 @@ export interface Routine {
   /** 計時格式的預設；其他格式忽略。 */
   timerDefaults?: TimerDefaults;
   archived: boolean;
+  /**
+   * 分享擷圖時要不要帶這個目標的內容。關掉後，打勾紀錄與書寫區塊都不會畫進圖裡。
+   * 當天清單與統計仍看得到。舊資料沒有這個欄位時視為 true。
+   */
+  shared: boolean;
   createdAt: string;
   /** 登入同步時用來判斷本機／雲端哪一份較新；沒登入過的舊資料以 createdAt 補上。 */
   updatedAt: string;

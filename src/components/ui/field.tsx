@@ -19,6 +19,14 @@ export function TextArea({ className, ...props }: ComponentProps<"textarea">) {
   return <textarea className={cn(CONTROL_BASE, "prose-zh resize-y", className)} {...props} />;
 }
 
+export function Select({ className, children, ...props }: ComponentProps<"select">) {
+  return (
+    <select className={cn(CONTROL_BASE, "min-h-10 py-2 pr-8", className)} {...props}>
+      {children}
+    </select>
+  );
+}
+
 export function Field({
   label,
   hint,

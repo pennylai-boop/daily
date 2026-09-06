@@ -46,6 +46,7 @@ export function LineChart({
   yTicks = 4,
   formatValue = (value) => `${Math.round(value)}`,
   emptyHint = "這段期間還沒有資料。",
+  showLegend = true,
 }: {
   labels: string[];
   series: ChartSeries[];
@@ -55,6 +56,7 @@ export function LineChart({
   yTicks?: number;
   formatValue?: (value: number) => string;
   emptyHint?: string;
+  showLegend?: boolean;
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const { ref, width } = useMeasuredWidth(640);
@@ -94,18 +96,20 @@ export function LineChart({
 
   return (
     <div className="space-y-3" ref={ref}>
-      <ul className="flex flex-wrap gap-x-3.5 gap-y-1.5">
-        {series.map((item) => (
-          <li key={item.id} className="flex items-center gap-1.5 text-xs text-ink-muted">
-            <span
-              aria-hidden
-              className="h-0.5 w-4 shrink-0 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
-            {item.label}
-          </li>
-        ))}
-      </ul>
+      {showLegend ? (
+        <ul className="flex flex-wrap gap-x-3.5 gap-y-1.5">
+          {series.map((item) => (
+            <li key={item.id} className="flex items-center gap-1.5 text-xs text-ink-muted">
+              <span
+                aria-hidden
+                className="h-0.5 w-4 shrink-0 rounded-full"
+                style={{ backgroundColor: item.color }}
+              />
+              {item.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {hasData ? (
         <div

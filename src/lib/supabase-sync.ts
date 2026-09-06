@@ -302,6 +302,7 @@ export async function pushRoutine(routine: Routine): Promise<void> {
     metric_fields: routine.metricFields ?? null,
     timer_defaults: routine.timerDefaults ?? null,
     archived: routine.archived,
+    shared: routine.shared !== false,
   });
   if (error) console.error("[supabase-sync] pushRoutine", error);
 }
@@ -613,6 +614,7 @@ interface RoutineRow {
   metric_fields: Routine["metricFields"] | null;
   timer_defaults: Routine["timerDefaults"] | null;
   archived: boolean;
+  shared?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -628,6 +630,7 @@ function routineFromRow(row: RoutineRow): Routine {
     metricFields: row.metric_fields ?? undefined,
     timerDefaults: row.timer_defaults ?? undefined,
     archived: row.archived,
+    shared: row.shared !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

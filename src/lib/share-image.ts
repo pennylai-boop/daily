@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCardDate, formatFullDate } from "./date";
+import { isRoutineShared } from "./routines";
 import { ensureLiff } from "./liff";
 import { DEFAULT_MOOD, findMood, type MoodOption } from "./moods";
 import { blobToDataUrl, hasNativeShare, nativeShare } from "./native-bridge";
@@ -204,17 +205,23 @@ class PageBuilder {
     brandLogo: HTMLImageElement | null,
   ) {
     const y = this.y;
-    const { weekday, monthDay } = formatCardDate(entry.date);
+    const { monthDay } = formatCardDate(entry.date);
+    const logoSize = 56;
+    const logoX = WIDTH - PADDING - logoSize;
+    const logoY = y + 4;
 
     this.commands.push((ctx) => {
       ctx.fillStyle = COLORS.ink;
       ctx.textBaseline = "alphabetic";
-      ctx.font = this.font(26, 500);
-      ctx.fillText(weekday, PADDING, y + 26);
-      ctx.fillRect(PADDING, y + 34, ctx.measureText(weekday).width, 2);
       ctx.font = this.font(38, 600);
-      ctx.fillText(monthDay, PADDING, y + 82);
-      if (brandLogo) ctx.drawImage(brandLogo, WIDTH - PADDING - 56, y + 4, 56, 56);
+      ctx.fillText(monthDay, PADDING, y + 48);
+      if (brandLogo) {
+        ctx.drawImage(brandLogo, logoX, logoY, logoSize, logoSize);
+        ctx.font = this.font(22, 600);
+        ctx.textAlign = "center";
+        ctx.fillText("天天", logoX + logoSize / 2, logoY + logoSize + 26);
+        ctx.textAlign = "left";
+      }
     });
     this.y += 120;
 
@@ -491,8 +498,14 @@ export async function buildDayImage(
     page.space(18);
   }
 
+  const hiddenRoutineIds = new Set(
+    routines.filter((routine) => !isRoutineShared(routine)).map((routine) => routine.id),
+  );
   const doneRoutines = routines.filter(
-    (routine) => checkedIds.includes(routine.id) && routine.template === null,
+    (routine) =>
+      checkedIds.includes(routine.id) &&
+      routine.template === null &&
+      isRoutineShared(routine),
   );
   if (doneRoutines.length > 0) {
     page.sectionTitle("🔁", "完成的定期事項");
@@ -501,6 +514,7 @@ export async function buildDayImage(
   }
 
   for (const block of entry.blocks) {
+    if (block.routineId && hiddenRoutineIds.has(block.routineId)) continue;
     if (isBlockEmpty(block)) continue;
     const meta = getTemplate(block.template);
     page.sectionTitle(meta.emoji, meta.name);

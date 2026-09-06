@@ -7,10 +7,12 @@ import { BlockEditor } from "@/components/entry/block-editor";
 import { FocusList } from "@/components/entry/focus-list";
 import { MoodField, MoodGlyph } from "@/components/entry/mood-picker";
 import { PhotoStrip } from "@/components/entry/photo-strip";
-import { ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "@/components/icons";
+import { VoiceFill } from "@/components/entry/voice-fill";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "@/components/icons";
 import { RoutineCheckGrid } from "@/components/routines/check-grid";
 import { ShareDayDialog } from "@/components/share-day-dialog";
 import { Button, LinkButton } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { CollapsibleSection } from "@/components/ui/collapsible";
 import { Chip } from "@/components/ui/surfaces";
 import {
@@ -35,7 +37,9 @@ import {
   type EntryBlock,
   type IsoDate,
   type Routine,
+  type TemplateId,
 } from "@/lib/types";
+import type { VoiceFillResult } from "@/server/entry-fill";
 
 export function EntryScreen({ date }: { date: IsoDate }) {
   const { state, ready } = useDailyStore();
@@ -64,6 +68,7 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareImage, setShareImage] = useState<PreparedDayImage | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [moveNotice, setMoveNotice] = useState<string | null>(null);
   const shareImageRef = useRef<PreparedDayImage | null>(null);
   shareImageRef.current = shareImage;
 
@@ -144,6 +149,189 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
       });
     } else if (wasChecked && block && isBlockEmpty(block)) {
       removeBlock(block.id);
+    }
+  };
+
+  // 只有「今天」的紀錄、且還在可補寫昨天的時段（中午前），才提供把單一項目改記到昨天。
+  const yesterday = addDays(date, -1);
+  const canMoveToYesterday = isToday && canEditEntry(yesterday);
+
+  const moveBlockToYesterday = (block: EntryBlock) => {
+    if (!canMoveToYesterday || isBlockEmpty(block)) return;
+
+    const base = state.entries[yesterday] ?? createDayEntry(yesterday);
+    const clash = base.blocks.some(
+      (existing) =>
+        existing.routineId === block.routineId &&
+        existing.template === block.template &&
+        !isBlockEmpty(existing),
+    );
+    if (clash) {
+      setMoveNotice("昨天已經寫過這個項目了，沒有改過去。");
+      return;
+    }
+
+    saveEntry({
+      ...base,
+      blocks: [...base.blocks, { ...block }],
+      updatedAt: new Date().toISOString(),
+    });
+
+    // 定期事項的打勾也跟著改到昨天。
+    const routine = state.routines.find((item) => item.id === block.routineId);
+    if (routine && checkedIds.includes(routine.id)) {
+      toggleRoutineCheck(routine.id, date);
+      if (!(state.checks[yesterday] ?? []).includes(routine.id)) {
+        toggleRoutineCheck(routine.id, yesterday);
+      }
+    }
+
+    removeBlock(block.id);
+    setMoveNotice("已把這個項目改記到昨天。");
+  };
+
+  useEffect(() => {
+    if (!moveNotice) return;
+    const timer = setTimeout(() => setMoveNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [moveNotice]);
+
+  // 語音整理能填的欄位，就是這天可書寫的定期事項所涵蓋的格式。
+  const writableRoutines = [...dueRoutines, ...extraRoutines];
+  const voiceTemplates = Array.from(
+    new Set(
+      writableRoutines
+        .map((routine) => routine.template)
+        .filter((template): template is TemplateId => template !== null),
+    ),
+  );
+  const voiceMetricLabels = Array.from(
+    new Set(
+      writableRoutines
+        .flatMap((routine) => routine.metricFields ?? [])
+        .map((field) => field.label.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  /** 把 AI 整理出來的內容填進當天草稿：目標逐條追加，各書寫格式對到同 template 的定期事項。 */
+  const applyVoiceFill = (result: VoiceFillResult) => {
+    if (!editable) return;
+
+    const routineForTemplate = (template: TemplateId) =>
+      writableRoutines.find((routine) => routine.template === template);
+
+    let blocks = draft.blocks;
+    const toCheck: string[] = [];
+
+    const ensureBlock = (template: TemplateId) => {
+      const routine = routineForTemplate(template);
+      if (!routine || !routine.template) return null;
+      let block = blocks.find(
+        (item) => item.routineId === routine.id && item.template === routine.template,
+      );
+      if (!block) {
+        block = {
+          id: createId(),
+          routineId: routine.id,
+          ...createEmptyContent(routine.template, {
+            metricFields: routine.metricFields,
+            timerDefaults: routine.timerDefaults,
+          }),
+        };
+        blocks = [...blocks, block];
+      }
+      toCheck.push(routine.id);
+      return { routine, block };
+    };
+
+    const replaceBlock = (id: string, next: EntryBlock) => {
+      blocks = blocks.map((item) => (item.id === id ? next : item));
+    };
+
+    if (result.diary) {
+      const found = ensureBlock("diary");
+      if (found && found.block.template === "diary") {
+        const prev = found.block.data;
+        replaceBlock(found.block.id, {
+          ...found.block,
+          data: {
+            title: prev.title || result.diary.title,
+            body: [prev.body, result.diary.body].filter(Boolean).join("\n\n"),
+          },
+        });
+      }
+    }
+
+    if (result.gratitude.length > 0) {
+      const found = ensureBlock("gratitude");
+      if (found && found.block.template === "gratitude") {
+        const items = [...found.block.data.items];
+        let cursor = 0;
+        for (const text of result.gratitude) {
+          while (cursor < items.length && items[cursor].trim()) cursor += 1;
+          if (cursor < items.length) items[cursor] = text;
+          else items.push(text);
+          cursor += 1;
+        }
+        replaceBlock(found.block.id, { ...found.block, data: { items } });
+      }
+    }
+
+    if (result.mindfulness.length > 0) {
+      const found = ensureBlock("mindfulness");
+      if (found && found.block.template === "mindfulness") {
+        replaceBlock(found.block.id, {
+          ...found.block,
+          data: {
+            items: [
+              ...found.block.data.items,
+              ...result.mindfulness.map((entry) => ({
+                id: createId(),
+                channel: entry.channel,
+                mark: entry.mark,
+                text: entry.text,
+              })),
+            ],
+          },
+        });
+      }
+    }
+
+    if (result.metrics.length > 0) {
+      const found = ensureBlock("metric");
+      if (found && found.block.template === "metric") {
+        const fields = found.block.data.fields.length
+          ? found.block.data.fields
+          : (found.routine.metricFields ?? []);
+        const values = { ...found.block.data.values };
+        for (const metric of result.metrics) {
+          const field = fields.find((item) => item.label === metric.label);
+          if (field) values[field.id] = metric.value;
+        }
+        replaceBlock(found.block.id, {
+          ...found.block,
+          data: { ...found.block.data, fields, values },
+        });
+      }
+    }
+
+    const focus =
+      result.focus.length > 0
+        ? [
+            ...draft.focus,
+            ...result.focus
+              .filter(
+                (text) => !draft.focus.some((item) => item.text.trim() === text.trim()),
+              )
+              .map((text) => ({ id: createId(), text, done: false })),
+          ]
+        : draft.focus;
+
+    update({ blocks, focus });
+
+    for (const routineId of toCheck) {
+      if (!checkedIds.includes(routineId)) toggleRoutineCheck(routineId, date);
     }
   };
 
@@ -248,10 +436,28 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
             只能書寫今天的紀錄；當天中午前還可以補寫昨天。過去的內容可以查看，但不能修改或刪除。
           </p>
         ) : null}
+
+        {moveNotice ? (
+          <p
+            role="status"
+            className="rounded-lg bg-brand-tint px-3.5 py-2.5 text-[13px] text-brand-strong"
+          >
+            {moveNotice}
+          </p>
+        ) : null}
       </header>
 
       <div className="relative">
         <fieldset disabled={!editable} className="min-w-0 space-y-5 border-0 p-0 disabled:opacity-90">
+      {editable ? (
+        <VoiceFill
+          templates={voiceTemplates}
+          metricLabels={voiceMetricLabels}
+          adFreeUntil={state.settings.adFreeUntil}
+          onApply={applyVoiceFill}
+        />
+      ) : null}
+
       <section className="card px-4 py-4">
         <h2 className="text-sm font-semibold text-ink">當日目標</h2>
         <p className="mt-0.5 mb-3 text-[13px] text-ink-muted">寫下想完成的事，完成後打勾。</p>
@@ -282,6 +488,7 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
                 block={blockFor(routine)}
                 checked={checkedIds.includes(routine.id)}
                 onBlockChange={setBlock}
+                onMoveToYesterday={canMoveToYesterday ? moveBlockToYesterday : undefined}
               />
             ))}
           </div>
@@ -317,6 +524,7 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
                 block={blockFor(routine)}
                 checked={checkedIds.includes(routine.id)}
                 onBlockChange={setBlock}
+                onMoveToYesterday={canMoveToYesterday ? moveBlockToYesterday : undefined}
               />
             ))}
           </div>
@@ -416,12 +624,26 @@ function RoutinePanel({
   block,
   checked,
   onBlockChange,
+  onMoveToYesterday,
 }: {
   routine: Routine;
   block: EntryBlock | undefined;
   checked: boolean;
   onBlockChange: (next: EntryBlock) => void;
+  /** 只有「今天」中午前才會帶進來；讓已寫的內容可以改記到昨天。 */
+  onMoveToYesterday?: (block: EntryBlock) => void;
 }) {
+  // 完成的事項預設收合，未完成的預設展開；使用者仍可手動點開／收起。
+  const [open, setOpen] = useState(!checked);
+  const prevChecked = useRef(checked);
+
+  useEffect(() => {
+    if (checked === prevChecked.current) return;
+    // 剛打勾 → 自動收合內容；剛取消打勾 → 自動展開方便繼續寫。
+    setOpen(!checked);
+    prevChecked.current = checked;
+  }, [checked]);
+
   if (!block) return null;
   if (!checked && isBlockEmpty(block)) return null;
 
@@ -429,21 +651,62 @@ function RoutinePanel({
 
   return (
     <section className="card overflow-hidden">
-      <header className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-line bg-surface-muted/50 px-4 py-2.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          "flex w-full items-center gap-x-2 gap-y-0.5 bg-surface-muted/50 px-4 py-2.5 text-left",
+          open && "border-b border-line",
+        )}
+      >
+        <ChevronDownIcon
+          className={cn(
+            "size-4 shrink-0 text-ink-subtle transition-transform",
+            !open && "-rotate-90",
+          )}
+          strokeWidth={2.2}
+        />
         <span aria-hidden className="text-base">
           {routine.emoji}
         </span>
         <h3 className="text-sm font-semibold text-ink">{routine.title}</h3>
-        {meta ? <span className="text-xs text-ink-subtle">{meta.tagline}</span> : null}
-      </header>
-      <div className="px-4 py-4">
-        <BlockEditor
-          block={block}
-          metricFields={routine.metricFields}
-          onChange={onBlockChange}
-          showHeader={false}
-        />
-      </div>
+        {meta ? (
+          <span className="hidden text-xs text-ink-subtle sm:inline">{meta.tagline}</span>
+        ) : null}
+        {checked ? (
+          <span
+            className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"
+            aria-label="已完成"
+            title="已完成"
+          >
+            <CheckIcon className="size-3.5" strokeWidth={2.6} />
+          </span>
+        ) : null}
+      </button>
+      {open ? (
+        <div className="space-y-3 px-4 py-4">
+          <BlockEditor
+            block={block}
+            metricFields={routine.metricFields}
+            onChange={onBlockChange}
+            showHeader={false}
+          />
+          {onMoveToYesterday && !isBlockEmpty(block) ? (
+            <div className="flex justify-end border-t border-line pt-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-ink-muted"
+                onClick={() => onMoveToYesterday(block)}
+              >
+                改記到昨天
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

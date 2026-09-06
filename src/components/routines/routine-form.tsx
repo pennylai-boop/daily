@@ -6,6 +6,7 @@ import { CloseIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Field, TextInput } from "@/components/ui/field";
+import { Switch } from "@/components/ui/segmented";
 import { todayIso, WEEKDAY_LABELS } from "@/lib/date";
 import { ROUTINE_EMOJIS } from "@/lib/routines";
 import { TEMPLATES } from "@/lib/templates";
@@ -56,6 +57,7 @@ export function RoutineForm({
       metricFields: [{ id: createId(), label: "", unit: "" }],
       timerDefaults: DEFAULT_TIMER,
       archived: false,
+      shared: true,
     },
   );
 
@@ -84,6 +86,7 @@ export function RoutineForm({
             .map((field) => ({ ...field, label: field.label.trim(), unit: field.unit.trim() }))
             .filter((field) => field.label.length > 0),
           timerDefaults: draft.timerDefaults ?? DEFAULT_TIMER,
+          shared: draft.shared !== false,
         });
       }}
     >
@@ -252,6 +255,20 @@ export function RoutineForm({
           placeholder="例如：起床後、盥洗前"
           onChange={(event) => setDraft({ ...draft, note: event.target.value })}
         />
+      </Field>
+
+      <Field
+        label="分享擷圖"
+        hint="關掉之後，傳送今天的擷取圖不會出現這個目標的內容。當天清單與統計仍看得到。"
+      >
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={draft.shared !== false}
+            onChange={(shared) => setDraft({ ...draft, shared })}
+            label="分享擷圖時顯示這個目標"
+          />
+          <span className="text-sm text-ink-muted">{draft.shared !== false ? "顯示" : "隱藏"}</span>
+        </div>
       </Field>
 
       <div className="flex gap-2 border-t border-line pt-4 sm:justify-end">

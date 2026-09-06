@@ -130,7 +130,7 @@ export function formatFullDate(iso: IsoDate): string {
   }`;
 }
 
-/** 分享圖左上角用的英文週別與月日，例如 Tues. / 09.01。 */
+/** 分享圖左上角用的月日，例如 09.01。weekday 保留給其他排版。 */
 const CARD_WEEKDAYS = ["Sun.", "Mon.", "Tues.", "Wed.", "Thurs.", "Fri.", "Sat."];
 
 export function formatCardDate(iso: IsoDate): { weekday: string; monthDay: string } {
