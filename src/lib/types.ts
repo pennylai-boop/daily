@@ -163,6 +163,8 @@ export interface Routine {
    * 當天清單與統計仍看得到。舊資料沒有這個欄位時視為 true。
    */
   shared: boolean;
+  /** 清單顯示順序，數字小的在上面。舊資料沒有時用陣列位置補上。 */
+  sortOrder: number;
   createdAt: string;
   /** 登入同步時用來判斷本機／雲端哪一份較新；沒登入過的舊資料以 createdAt 補上。 */
   updatedAt: string;

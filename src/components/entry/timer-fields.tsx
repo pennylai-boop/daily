@@ -8,6 +8,11 @@ import { TextInput } from "@/components/ui/field";
 import { formatDuration, timerElapsedSeconds } from "@/lib/templates";
 import type { EntryBlock, TimerMode } from "@/lib/types";
 
+/** 這一段（從 runningStartedAt 到現在）已經過的整數秒。 */
+function elapsedSince(startedAt: string): number {
+  return Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000));
+}
+
 export function TimerFields({
   block,
   onChange,
@@ -19,14 +24,16 @@ export function TimerFields({
   const data = block.data;
   const running = Boolean(data.runningStartedAt);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
       const current = data;
       if (current.mode === "pomodoro" && current.runningStartedAt) {
-        const elapsed = Math.floor((Date.now() - Date.parse(current.runningStartedAt)) / 1000);
+        const elapsed = elapsedSince(current.runningStartedAt);
         if (elapsed >= current.pomodoroMinutes * 60) {
           onChangeRef.current({
             ...current,
@@ -43,9 +50,7 @@ export function TimerFields({
 
   const liveSeconds = timerElapsedSeconds(data);
   const sessionCap = data.pomodoroMinutes * 60;
-  const sessionElapsed = data.runningStartedAt
-    ? Math.max(0, Math.floor((Date.now() - Date.parse(data.runningStartedAt)) / 1000))
-    : 0;
+  const sessionElapsed = data.runningStartedAt ? elapsedSince(data.runningStartedAt) : 0;
   const remaining = Math.max(0, sessionCap - sessionElapsed);
   const display = data.mode === "pomodoro" && running ? remaining : liveSeconds;
 
@@ -61,7 +66,7 @@ export function TimerFields({
 
   const pause = () => {
     if (!data.runningStartedAt) return;
-    const extra = Math.max(0, Math.floor((Date.now() - Date.parse(data.runningStartedAt)) / 1000));
+    const extra = elapsedSince(data.runningStartedAt);
     if (data.mode === "pomodoro") {
       onChange({
         ...data,

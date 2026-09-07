@@ -422,7 +422,9 @@ function ShareTargetsCard() {
   const [shareImage, setShareImage] = useState<PreparedDayImage | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const shareImageRef = useRef<PreparedDayImage | null>(null);
-  shareImageRef.current = shareImage;
+  useEffect(() => {
+    shareImageRef.current = shareImage;
+  }, [shareImage]);
 
   const addFromLine = async () => {
     setPicking(true);
@@ -684,6 +686,8 @@ function ShareCard() {
     const code = params.get("code") ?? shareId ?? "";
     if (!code) return;
     autoInvited.current = true;
+    // 從 LIFF 深連結回來時自動送出一次邀請；sendLink 內的狀態更新都在 await 之後。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void sendLink(code, true);
     // 只在從 LIFF 深連結回來時跑一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps

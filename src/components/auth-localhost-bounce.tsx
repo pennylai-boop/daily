@@ -1,24 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { PRODUCTION_ORIGIN } from "@/lib/line-auth";
+
+const noopSubscribe = () => () => {};
+
+/** 只在本機、且 hash 帶著 OAuth token 時，回傳那段 hash；其餘情況回空字串。 */
+function readLocalhostAuthHash(): string {
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1") return "";
+  const current = window.location.hash;
+  return current.includes("access_token") ? current : "";
+}
 
 /**
  * 正式站登入若被 Supabase 退回 Site URL（本機），hash 裡的 token 會落在 localhost。
  * 讓使用者可以把同一組 token 送回正式站，不必重登一次。
  */
 export function AuthLocalhostBounce() {
-  const [hash, setHash] = useState("");
-
-  useEffect(() => {
-    if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-      return;
-    }
-    const current = window.location.hash;
-    if (current.includes("access_token")) setHash(current);
-  }, []);
+  // hash 只在掛載當下讀一次即可（不會再變），用 useSyncExternalStore 讀取以避免
+  // hydration 落差，也不必在 effect 裡 setState。
+  const hash = useSyncExternalStore(noopSubscribe, readLocalhostAuthHash, () => "");
 
   if (!hash) return null;
 

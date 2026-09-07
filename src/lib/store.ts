@@ -6,6 +6,7 @@ import { fetchAdFreeUntil } from "./adfree-checkout";
 import { todayIso } from "./date";
 import { clampFocusMinutes, focusElapsedSeconds, focusShouldComplete } from "./focus";
 import { createCustomMoodId } from "./moods";
+import { applyActiveRoutineOrder } from "./routines";
 import { profileFromSession } from "./line-auth";
 import { getSupabaseBrowser } from "./supabase-browser";
 import {
@@ -181,11 +182,13 @@ export function removeCustomMood(id: string): void {
   if (hasSession()) void deleteCustomMoodRemote(id);
 }
 
-export function addRoutine(input: Omit<Routine, "id" | "createdAt" | "updatedAt">): void {
+export function addRoutine(input: Omit<Routine, "id" | "createdAt" | "updatedAt" | "sortOrder">): void {
   let created: Routine | null = null;
   commit((current) => {
     const now = new Date().toISOString();
-    const routine: Routine = { ...input, id: createId(), createdAt: now, updatedAt: now };
+    const sortOrder =
+      current.routines.reduce((max, routine) => Math.max(max, routine.sortOrder ?? 0), -1) + 1;
+    const routine: Routine = { ...input, id: createId(), sortOrder, createdAt: now, updatedAt: now };
     created = routine;
     return { ...current, routines: [...current.routines, routine] };
   });
@@ -222,6 +225,35 @@ export function deleteRoutine(id: string): void {
     };
   });
   if (hasSession()) void deleteRoutineRemote(id);
+}
+
+/** 依使用中事項的新順序重排；封存的不動。 */
+export function reorderActiveRoutines(orderedIds: string[]): void {
+  const changed: Routine[] = [];
+  commit((current) => {
+    const routines = applyActiveRoutineOrder(current.routines, orderedIds);
+    for (const routine of routines) {
+      const before = current.routines.find((item) => item.id === routine.id);
+      if (before && before.sortOrder !== routine.sortOrder) changed.push(routine);
+    }
+    return { ...current, routines };
+  });
+  if (hasSession()) {
+    for (const routine of changed) void pushRoutine(routine);
+  }
+}
+
+export function moveRoutine(id: string, direction: -1 | 1): void {
+  const snapshot = getSnapshot();
+  if (!snapshot) return;
+  const active = snapshot.routines.filter((routine) => !routine.archived);
+  const index = active.findIndex((routine) => routine.id === id);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= active.length) return;
+  const ids = active.map((routine) => routine.id);
+  const [moved] = ids.splice(index, 1);
+  ids.splice(next, 0, moved);
+  reorderActiveRoutines(ids);
 }
 
 /** 寫入某一週的目標清單；空陣列會清掉該 key。 */
@@ -774,6 +806,8 @@ export interface DailyStore {
   addRoutine: typeof addRoutine;
   updateRoutine: typeof updateRoutine;
   deleteRoutine: typeof deleteRoutine;
+  reorderActiveRoutines: typeof reorderActiveRoutines;
+  moveRoutine: typeof moveRoutine;
   setWeekGoals: typeof setWeekGoals;
   setMonthGoals: typeof setMonthGoals;
   toggleRoutineCheck: typeof toggleRoutineCheck;
@@ -821,6 +855,8 @@ export function useDailyStore(): DailyStore {
     addRoutine,
     updateRoutine,
     deleteRoutine,
+    reorderActiveRoutines,
+    moveRoutine,
     setWeekGoals,
     setMonthGoals,
     toggleRoutineCheck,

@@ -70,7 +70,9 @@ function EntryForm({ date, initial }: { date: IsoDate; initial: DayEntry }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [moveNotice, setMoveNotice] = useState<string | null>(null);
   const shareImageRef = useRef<PreparedDayImage | null>(null);
-  shareImageRef.current = shareImage;
+  useEffect(() => {
+    shareImageRef.current = shareImage;
+  }, [shareImage]);
 
   const editable = canEditEntry(date);
   const deletable = canDeleteEntry(date);

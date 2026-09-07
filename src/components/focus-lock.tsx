@@ -33,7 +33,9 @@ export function FocusLock() {
   const open = isOpenFocus(focus);
   const wakeLock = useRef<WakeLockSentinel | null>(null);
   const focusRef = useRef(focus);
-  focusRef.current = focus;
+  useEffect(() => {
+    focusRef.current = focus;
+  });
 
   useEffect(() => {
     if (ready) settleExpiredFocus();

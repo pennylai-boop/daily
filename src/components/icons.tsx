@@ -188,6 +188,27 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+export function ChevronUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 15l7-7 7 7" />
+    </Icon>
+  );
+}
+
+export function GripIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="9" cy="6" r="1.15" fill="currentColor" />
+      <circle cx="15" cy="6" r="1.15" fill="currentColor" />
+      <circle cx="9" cy="12" r="1.15" fill="currentColor" />
+      <circle cx="15" cy="12" r="1.15" fill="currentColor" />
+      <circle cx="9" cy="18" r="1.15" fill="currentColor" />
+      <circle cx="15" cy="18" r="1.15" fill="currentColor" />
+    </Icon>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>

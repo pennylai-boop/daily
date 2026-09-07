@@ -45,16 +45,17 @@ export function PaymentHistory() {
   const [loginBusy, setLoginBusy] = useState(false);
 
   useEffect(() => {
-    if (!ready || !loggedIn) {
-      setOrders(null);
-      return;
-    }
+    if (!ready || !loggedIn) return;
 
     let cancelled = false;
     void (async () => {
       const token = await sessionAccessToken();
+      if (cancelled) return;
+      // 換帳號重新登入時先清掉上一輪的紀錄，再拉新的。放在 await 之後，
+      // 不在 effect 同步階段更新狀態。
+      setOrders(null);
       if (!token) {
-        if (!cancelled) setError("請重新登入後再查看付款紀錄。");
+        setError("請重新登入後再查看付款紀錄。");
         return;
       }
       try {

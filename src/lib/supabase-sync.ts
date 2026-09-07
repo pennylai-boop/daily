@@ -10,6 +10,7 @@
  * 下一次登入才會看到另一台裝置的變更。
  */
 
+import { dedupeRoutines, sortRoutines } from "./routines";
 import { STANDING_INVITE_NAME } from "./storage";
 import { getSupabaseBrowser } from "./supabase-browser";
 import type {
@@ -152,11 +153,13 @@ export function mergeStates(local: DailyState, remote: RemoteState, sessionProfi
     (a, b) => (a.updatedAt >= b.updatedAt ? a : b),
   );
 
-  const routines = mergeByArrayKey(
-    local.routines,
-    remote.routines,
-    (r) => r.id,
-    (a, b) => (a.updatedAt >= b.updatedAt ? a : b),
+  const routines = sortRoutines(
+    mergeByArrayKey(
+      local.routines,
+      remote.routines,
+      (r) => r.id,
+      (a, b) => (a.updatedAt >= b.updatedAt ? a : b),
+    ),
   );
 
   const customMoods = mergeByArrayKey(
@@ -188,11 +191,15 @@ export function mergeStates(local: DailyState, remote: RemoteState, sessionProfi
       ? remote.pepTalkQuotes
       : (localQuotes ?? remote.pepTalkQuotes);
 
+  // 兩台裝置各自種過預設事項時，用 id 合併會留下兩份「五感恩／觀心書／寫日記」，
+  // 這裡依「書寫格式＋名稱」併回一份，打勾與內容一起改指過去。
+  const deduped = dedupeRoutines(routines, checks, entries);
+
   return {
     ...local,
-    entries,
-    routines,
-    checks,
+    entries: deduped.entries,
+    routines: deduped.routines,
+    checks: deduped.checks,
     weekGoals,
     monthGoals,
     customMoods,
@@ -303,6 +310,7 @@ export async function pushRoutine(routine: Routine): Promise<void> {
     timer_defaults: routine.timerDefaults ?? null,
     archived: routine.archived,
     shared: routine.shared !== false,
+    sort_order: routine.sortOrder ?? 0,
   });
   if (error) console.error("[supabase-sync] pushRoutine", error);
 }
@@ -615,6 +623,7 @@ interface RoutineRow {
   timer_defaults: Routine["timerDefaults"] | null;
   archived: boolean;
   shared?: boolean;
+  sort_order?: number;
   created_at: string;
   updated_at: string;
 }
@@ -631,6 +640,7 @@ function routineFromRow(row: RoutineRow): Routine {
     timerDefaults: row.timer_defaults ?? undefined,
     archived: row.archived,
     shared: row.shared !== false,
+    sortOrder: Number.isFinite(row.sort_order) ? Number(row.sort_order) : 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -5,8 +5,11 @@ import { useState } from "react";
 
 import { FocusList } from "@/components/entry/focus-list";
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
+  GripIcon,
   PencilIcon,
   PlusIcon,
   TrashIcon,
@@ -26,7 +29,7 @@ import {
   startOfWeek,
   todayIso,
 } from "@/lib/date";
-import { describeFrequency, isRoutineDueOn } from "@/lib/routines";
+import { describeFrequency, isRoutineDueOn, sortRoutines } from "@/lib/routines";
 import { routineProgress } from "@/lib/stats";
 import { useDailyStore } from "@/lib/store";
 import { getTemplate } from "@/lib/templates";
@@ -39,12 +42,15 @@ export function RoutinesScreen() {
     addRoutine,
     updateRoutine,
     deleteRoutine,
+    moveRoutine,
+    reorderActiveRoutines,
     setWeekGoals,
     setMonthGoals,
   } = useDailyStore();
   const [mode, setMode] = useState<{ kind: "closed" } | { kind: "create" } | { kind: "edit"; id: string }>({
     kind: "closed",
   });
+  const [dragId, setDragId] = useState<string | null>(null);
   const [weekCursor, setWeekCursor] = useState<IsoDate>(() => startOfWeek(todayIso()));
   const [monthCursor, setMonthCursor] = useState<IsoDate>(() => startOfMonth(todayIso()));
 
@@ -61,7 +67,7 @@ export function RoutinesScreen() {
   const weekItems = state.weekGoals[weekCursor] ?? [];
   const month = monthKey(monthCursor);
   const monthItems = state.monthGoals[month] ?? [];
-  const active = state.routines.filter((routine) => !routine.archived);
+  const active = sortRoutines(state.routines.filter((routine) => !routine.archived));
   const archived = state.routines.filter((routine) => routine.archived);
   const progress = routineProgress(state, addDays(todayIso(), -29), today);
   const editing =
@@ -191,15 +197,40 @@ export function RoutinesScreen() {
 
       {active.length > 0 ? (
         <ul className="space-y-2.5">
-          {active.map((routine) => {
+          {active.map((routine, index) => {
             const stats = progress.find((item) => item.routine.id === routine.id);
             return (
-              <li key={routine.id}>
+              <li
+                key={routine.id}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const sourceId = dragId ?? event.dataTransfer.getData("text/plain");
+                  setDragId(null);
+                  if (!sourceId || sourceId === routine.id) return;
+                  const ids = active.map((item) => item.id);
+                  const from = ids.indexOf(sourceId);
+                  const to = ids.indexOf(routine.id);
+                  if (from < 0 || to < 0) return;
+                  ids.splice(from, 1);
+                  ids.splice(to, 0, sourceId);
+                  reorderActiveRoutines(ids);
+                }}
+              >
                 <RoutineRow
                   routine={routine}
                   dueToday={isRoutineDueOn(routine, today)}
                   doneToday={(state.checks[today] ?? []).includes(routine.id)}
                   rate={stats && stats.due > 0 ? stats.rate : null}
+                  canMoveUp={index > 0}
+                  canMoveDown={index < active.length - 1}
+                  dragging={dragId === routine.id}
+                  onMove={(direction) => moveRoutine(routine.id, direction)}
+                  onDragStart={() => setDragId(routine.id)}
+                  onDragEnd={() => setDragId(null)}
                   onEdit={() => setMode({ kind: "edit", id: routine.id })}
                   onArchive={() => updateRoutine(routine.id, { archived: true })}
                   onDelete={() => {
@@ -298,6 +329,12 @@ function RoutineRow({
   dueToday,
   doneToday,
   rate,
+  canMoveUp,
+  canMoveDown,
+  dragging,
+  onMove,
+  onDragStart,
+  onDragEnd,
   onEdit,
   onArchive,
   onDelete,
@@ -306,6 +343,12 @@ function RoutineRow({
   dueToday: boolean;
   doneToday: boolean;
   rate: number | null;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  dragging: boolean;
+  onMove: (direction: -1 | 1) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
   onEdit: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -331,6 +374,26 @@ function RoutineRow({
       <Button
         size="sm"
         variant="ghost"
+        aria-label={`把「${routine.title}」往上移`}
+        className="size-10 shrink-0 px-0"
+        disabled={!canMoveUp}
+        onClick={() => onMove(-1)}
+      >
+        <ChevronUpIcon className="size-6" strokeWidth={2} />
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={`把「${routine.title}」往下移`}
+        className="size-10 shrink-0 px-0"
+        disabled={!canMoveDown}
+        onClick={() => onMove(1)}
+      >
+        <ChevronDownIcon className="size-6" strokeWidth={2} />
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
         aria-label={`編輯「${routine.title}」的設定`}
         className="size-10 shrink-0 px-0"
         onClick={onEdit}
@@ -353,7 +416,12 @@ function RoutineRow({
   );
 
   return (
-    <div className="card group relative px-4 py-3.5 transition-colors hover:border-line-strong">
+    <div
+      className={cn(
+        "card group relative px-4 py-3.5 transition-colors hover:border-line-strong",
+        dragging && "opacity-55",
+      )}
+    >
       {/*
         整張卡片點下去進統計頁。用覆蓋整塊的連結而不是把整張卡包成 <a>：
         卡片裡有編輯／封存／刪除按鈕，連結裡不能再放按鈕。
@@ -366,6 +434,22 @@ function RoutineRow({
       </Link>
 
       <div className="flex items-start gap-3">
+        <button
+          type="button"
+          draggable
+          aria-label={`拖曳以調整「${routine.title}」的順序`}
+          title="拖曳以調整順序"
+          className="relative z-10 mt-1 flex size-8 shrink-0 cursor-grab items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-muted hover:text-ink active:cursor-grabbing"
+          onClick={(event) => event.preventDefault()}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", routine.id);
+            onDragStart();
+          }}
+          onDragEnd={onDragEnd}
+        >
+          <GripIcon className="size-5" />
+        </button>
         <span
           aria-hidden
           className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-lg"

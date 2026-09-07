@@ -13,8 +13,8 @@ import { TEMPLATES } from "@/lib/templates";
 import { createId } from "@/lib/storage";
 import { DEFAULT_TIMER, type MetricFieldDef, type Routine, type RoutineFrequency, type TimerDefaults } from "@/lib/types";
 
-/** updatedAt 由 store 在寫入時自己蓋上，表單不碰。 */
-type RoutineDraft = Omit<Routine, "id" | "createdAt" | "updatedAt">;
+/** updatedAt／sortOrder 由 store 在寫入時自己蓋上，表單不碰。 */
+type RoutineDraft = Omit<Routine, "id" | "createdAt" | "updatedAt" | "sortOrder">;
 
 const FREQUENCY_TABS: { kind: RoutineFrequency["kind"]; label: string }[] = [
   { kind: "daily", label: "每天" },

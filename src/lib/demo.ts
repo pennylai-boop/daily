@@ -81,7 +81,7 @@ function demoMindfulness(seed: number) {
   };
 }
 
-const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt">[] = [
+const DEMO_ROUTINES: Omit<Routine, "id" | "createdAt" | "updatedAt" | "sortOrder">[] = [
   {
     title: "寫日記",
     emoji: "✍️",
@@ -161,7 +161,7 @@ export function buildDemoState(): DailyState {
   const today = todayIso();
   const routines: Routine[] = DEMO_ROUTINES.map((routine, index) => {
     const createdAt = new Date(Date.now() - (index + 1) * 86_400_000).toISOString();
-    return { ...routine, id: createId(), createdAt, updatedAt: createdAt };
+    return { ...routine, id: createId(), sortOrder: index, createdAt, updatedAt: createdAt };
   });
 
   const diaryRoutine = routines.find((routine) => routine.template === "diary")!;

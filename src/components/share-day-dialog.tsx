@@ -28,12 +28,16 @@ export function ShareDayDialog({
   const [busy, setBusy] = useState<"download" | "send" | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => {
+  // 關閉時把上一次的狀態清掉，下次打開才不會殘留。用「上一個 open」在 render 階段
+  // 比對，而不是寫在 effect 裡（避免 react-hooks/set-state-in-effect 的連鎖 render）。
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) {
       setBusy(null);
       setNote(null);
     }
-  }, [open]);
+  }
 
   useEffect(() => {
     if (!open) return;

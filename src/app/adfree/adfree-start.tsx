@@ -40,7 +40,10 @@ export function AdFreeStart({ paymentReady }: { paymentReady: boolean }) {
 
   useEffect(() => {
     if (!ready || !paymentReady || busy || notice) return;
+    // 這個 effect 是「進站後自動接著登入 / 送出訂閱」的動作，setBusy 只是動作開始前
+    // 的 pending 旗標，之後的狀態更新都在 promise callback 裡。
     if (!loggedIn) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBusy(true);
       void signInWithLine().then((result) => {
         if (result.status === "unavailable") {

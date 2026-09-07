@@ -19,6 +19,8 @@ export function AuthCallback() {
     const next = safeNext(new URLSearchParams(window.location.search).get("next"));
     const supabase = getSupabaseBrowser();
     if (!supabase) {
+      // 掛載時的一次性提示（環境沒設定 Supabase 才會走到），不會造成連鎖 render。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNotice("這個環境還沒有設定 Supabase。");
       return;
     }

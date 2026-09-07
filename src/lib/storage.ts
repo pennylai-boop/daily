@@ -1,4 +1,4 @@
-import { DEFAULT_ROUTINES } from "./routines";
+import { DEFAULT_ROUTINES, dedupeRoutines, sortRoutines } from "./routines";
 import type {
   AppSettings,
   CustomMood,
@@ -42,8 +42,9 @@ export const THEME_KEY = "daily.theme";
  * 13：專心模式（番茄鐘與已完成時長）。
  * 14：打氣小語改為系統預設＋全站共享新增。
  * 15：每日目標可各自設定是否出現在分享擷圖。
+ * 16：每日目標可調整顯示順序。
  */
-export const STORE_VERSION = 15;
+export const STORE_VERSION = 16;
 
 /** 卜卦：三個月一輪的免費額度，還沒卜過的人第一次就是免費。 */
 export const EMPTY_DIVINATION: DivinationState = {
@@ -85,7 +86,14 @@ export function createInitialState(): DailyState {
     ...EMPTY_STATE,
     routines: DEFAULT_ROUTINES.map((routine, index) => {
       const createdAt = new Date(Date.now() + index).toISOString();
-      return { ...routine, id: createId(), createdAt, updatedAt: createdAt };
+      // 用固定 id（依書寫格式）而非隨機 id，換裝置合併時同一個預設事項才不會變成兩筆。
+      return {
+        ...routine,
+        id: `default-${routine.template ?? index}`,
+        sortOrder: index,
+        createdAt,
+        updatedAt: createdAt,
+      };
     }),
   };
 }
@@ -129,12 +137,25 @@ export function normalizeState(value: unknown): DailyState {
   if (!value || typeof value !== "object") return EMPTY_STATE;
   const candidate = value as Partial<DailyState>;
 
-  const entries: DailyState["entries"] = {};
+  const rawEntries: DailyState["entries"] = {};
   if (isRecord(candidate.entries)) {
     for (const [date, entry] of Object.entries(candidate.entries as DailyState["entries"])) {
-      entries[date] = normalizeEntry(entry);
+      rawEntries[date] = normalizeEntry(entry);
     }
   }
+
+  const rawRoutines = Array.isArray(candidate.routines)
+    ? sortRoutines(
+        candidate.routines.map((routine, index) => {
+          const next = withTemplate(routine);
+          return Number.isFinite(routine.sortOrder) ? next : { ...next, sortOrder: index };
+        }),
+      )
+    : [];
+  const rawChecks = isRecord(candidate.checks) ? (candidate.checks as DailyState["checks"]) : {};
+
+  // 併掉換裝置合併留下的重複預設事項，並把打勾／內容改指到留下來的那筆。
+  const { routines, checks, entries } = dedupeRoutines(rawRoutines, rawChecks, rawEntries);
 
   return {
     version: STORE_VERSION,
@@ -142,8 +163,8 @@ export function normalizeState(value: unknown): DailyState {
     customMoods: Array.isArray(candidate.customMoods)
       ? candidate.customMoods.map(normalizeCustomMood).filter((mood) => mood !== null)
       : [],
-    routines: Array.isArray(candidate.routines) ? candidate.routines.map(withTemplate) : [],
-    checks: isRecord(candidate.checks) ? (candidate.checks as DailyState["checks"]) : {},
+    routines,
+    checks,
     weekGoals: normalizePeriodGoalMap(candidate.weekGoals),
     monthGoals: normalizePeriodGoalMap(candidate.monthGoals),
     settings: mergeSettings(candidate.settings),
@@ -452,6 +473,7 @@ function withTemplate(routine: Routine): Routine {
     metricFields: normalizeMetricFields(routine.metricFields),
     timerDefaults: normalizeTimerDefaults(routine.timerDefaults),
     shared: routine.shared !== false,
+    sortOrder: Number.isFinite(routine.sortOrder) ? routine.sortOrder : 0,
     updatedAt: typeof routine.updatedAt === "string" ? routine.updatedAt : routine.createdAt,
   };
 }

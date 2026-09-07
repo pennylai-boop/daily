@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { resolvePepTalks } from "@/lib/pep-talk";
 import { setPepTalkVisible, useDailyStore } from "@/lib/store";
@@ -42,11 +42,9 @@ export function PepTalkBanner() {
   const { state, ready } = useDailyStore();
   const shared = state.sharedPepTalks;
   const pool = useMemo(() => resolvePepTalks(shared), [shared]);
-  const [sequence, setSequence] = useState<string[]>([]);
-
-  useEffect(() => {
-    setSequence(pickSequence(pool));
-  }, [pool]);
+  // 掛載時抽一次就固定（每次進站順序不同）。畫面要等 store ready 才顯示，
+  // 所以這個隨機初始值不會造成 hydration 落差。
+  const [sequence] = useState<string[]>(() => pickSequence(pool));
 
   const visible = ready && state.settings.pepTalk.visible && sequence.length > 0;
   if (!visible) return null;
