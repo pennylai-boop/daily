@@ -15,7 +15,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const config = payuniConfig();
-  const origin = new URL(request.url).origin;
+  // 用 config.siteUrl 當 origin，不要用 request.url 的 origin：部署在 Cloud Run 等反向
+  // 代理後面時，Node 收到的 request.url 反映容器內部監聽位址（如 http://0.0.0.0:8080），
+  // 不是對外網域，會把使用者導到瀏覽器連不到的網址（ERR_ADDRESS_INVALID）。
+  const origin = config?.siteUrl ?? new URL(request.url).origin;
   const target = new URL("/support/result", origin);
 
   if (!config) {
@@ -62,7 +65,8 @@ export async function POST(request: Request) {
 
 /** 有些支付工具會用 GET 帶使用者回來，導回結果頁避免看到 405。 */
 export async function GET(request: Request) {
-  const target = new URL("/support/result", new URL(request.url).origin);
+  const origin = payuniConfig()?.siteUrl ?? new URL(request.url).origin;
+  const target = new URL("/support/result", origin);
   target.searchParams.set("status", "unknown");
   return NextResponse.redirect(target, 303);
 }

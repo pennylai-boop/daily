@@ -10,8 +10,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const origin = new URL(request.url).origin;
   const config = payuniConfig();
+  // 用 config.siteUrl（跟建立 ReturnURL 時同一個值）當導回目的地的 origin，不要用
+  // request.url 的 origin：部署在 Cloud Run 等反向代理後面時，Node 收到的 request.url
+  // 反映的是容器內部監聽位址（例如 http://0.0.0.0:8080），而不是對外網域，會把使用者
+  // 導到瀏覽器連不到的網址（ERR_ADDRESS_INVALID）。
+  const origin = config?.siteUrl ?? new URL(request.url).origin;
   const ok = new URL("/settings", origin);
   ok.searchParams.set("adfree", "ok");
   ok.hash = "adfree";
@@ -40,7 +44,8 @@ export async function POST(request: Request) {
  * 所以只把人帶回設定頁、不宣告成功——實際狀態由那一頁自己去問 /api/adfree/status。
  */
 export async function GET(request: Request) {
-  const target = new URL("/settings", new URL(request.url).origin);
+  const origin = payuniConfig()?.siteUrl ?? new URL(request.url).origin;
+  const target = new URL("/settings", origin);
   target.hash = "adfree";
   return NextResponse.redirect(target, 303);
 }
