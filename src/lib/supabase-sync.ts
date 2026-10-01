@@ -111,6 +111,7 @@ export async function pullRemoteState(userId: string): Promise<RemoteState> {
       id: row.id,
       name: row.name,
       lastUsedAt: row.last_used_at,
+      lineGroupId: row.line_group_id ?? null,
     })),
     entries,
     routines: ((routinesRes.data ?? []) as RoutineRow[]).map(routineFromRow),
@@ -173,7 +174,11 @@ export function mergeStates(local: DailyState, remote: RemoteState, sessionProfi
     local.settings.line.targets,
     remote.lineTargets,
     (t) => t.name,
-    (a, b) => ((a.lastUsedAt ?? "") >= (b.lastUsedAt ?? "") ? a : b),
+    (a, b) => {
+      // 較新使用過的那筆為主，但群組綁定只要任一邊有就保留。
+      const base = (a.lastUsedAt ?? "") >= (b.lastUsedAt ?? "") ? a : b;
+      return { ...base, lineGroupId: a.lineGroupId ?? b.lineGroupId ?? null };
+    },
   );
 
   const checks: DailyState["checks"] = {};
@@ -406,6 +411,7 @@ export async function pullLineTargets(): Promise<LineShareTarget[] | null> {
     id: row.id,
     name: row.name,
     lastUsedAt: row.last_used_at,
+    lineGroupId: row.line_group_id ?? null,
   }));
 }
 
@@ -418,6 +424,7 @@ export async function pushLineTarget(target: LineShareTarget): Promise<void> {
     user_id: userId,
     name: target.name,
     last_used_at: target.lastUsedAt,
+    line_group_id: target.lineGroupId,
   });
   if (error) console.error("[supabase-sync] pushLineTarget", error);
 }
@@ -588,6 +595,7 @@ interface LineTargetRow {
   id: string;
   name: string;
   last_used_at: string | null;
+  line_group_id: string | null;
 }
 
 interface DayEntryRow {

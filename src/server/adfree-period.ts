@@ -44,8 +44,15 @@ export async function processAdFreePeriodPayment(callback: PeriodCallback): Prom
     return;
   }
 
-  const charged = callback.authAmt || parent.amount;
-  if (charged !== parent.amount && charged !== ADFREE_AMOUNT) {
+  const periodAmt = Number(callback.raw.PeriodAmt || callback.raw.FAmt || 0);
+  const charged = callback.authAmt || periodAmt || parent.amount;
+  // 前景返回有時 AuthAmt 是 1 元綁卡、真正的月費在 PeriodAmt。月費對得上就入帳。
+  const amountOk =
+    charged === parent.amount ||
+    charged === ADFREE_AMOUNT ||
+    periodAmt === parent.amount ||
+    periodAmt === ADFREE_AMOUNT;
+  if (!amountOk) {
     console.error(
       `[adfree] 訂單 ${parent.merTradeNo} 金額不符：建立 ${parent.amount}、回傳 ${charged}。`,
     );

@@ -1,10 +1,11 @@
 /**
- * PAYUNi 續期收款前景返回。入帳以 Notify 為準，這裡只把人帶回設定頁。
+ * PAYUNi 續期收款前景返回。成功時先入帳再開設定頁，背景通知若晚到也不會重複加天數。
  */
 
 import { NextResponse } from "next/server";
 
-import { parsePayuniCallback, payuniConfig } from "@/server/payuni";
+import { processAdFreePeriodPayment } from "@/server/adfree-period";
+import { isPeriodCallback, parsePayuniCallback, payuniConfig, toPeriodCallback } from "@/server/payuni";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,16 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const callback = parsePayuniCallback(form, config);
   if (callback?.status === "SUCCESS") {
+    // 入帳以 Notify 為準，但前景返回當下就要先開效期：
+    // 否則使用者已經扣到 50 元、回到設定頁，廣告仍會留著，直到背景通知成功為止。
+    // processAdFreePeriodPayment 對同一期只加一次天數。
+    if (isPeriodCallback(callback)) {
+      try {
+        await processAdFreePeriodPayment(toPeriodCallback(callback));
+      } catch (error) {
+        console.error("[adfree/return] 入帳失敗：", error);
+      }
+    }
     return NextResponse.redirect(ok, 303);
   }
 

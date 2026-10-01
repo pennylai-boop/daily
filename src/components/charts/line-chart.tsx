@@ -44,6 +44,8 @@ export function LineChart({
   yMin = 0,
   yMax,
   yTicks = 4,
+  /** fit：依這段期間的實際數字收斂刻度，避免從 0 拉到很大、中間空一片細線。 */
+  yScale = "fromZero",
   formatValue = (value) => `${Math.round(value)}`,
   emptyHint = "這段期間還沒有資料。",
   showLegend = true,
@@ -54,6 +56,7 @@ export function LineChart({
   yMin?: number;
   yMax?: number;
   yTicks?: number;
+  yScale?: "fromZero" | "fit";
   formatValue?: (value: number) => string;
   emptyHint?: string;
   showLegend?: boolean;
@@ -73,8 +76,13 @@ export function LineChart({
   );
   const hasData = allValues.length > 0;
 
-  const bottom = Math.min(yMin, hasData ? Math.min(...allValues) : 0);
-  const top = yMax ?? niceTop(hasData ? Math.max(...allValues) - bottom : 1, yTicks) + bottom;
+  const fitted = yScale === "fit" && hasData ? fitAxis(allValues, yTicks) : null;
+  const bottom = fitted
+    ? fitted.bottom
+    : Math.min(yMin, hasData ? Math.min(...allValues) : 0);
+  const top = fitted
+    ? fitted.top
+    : (yMax ?? niceTop(hasData ? Math.max(...allValues) - bottom : 1, yTicks) + bottom);
   const span = top - bottom || 1;
 
   const plotWidth = Math.max(1, width - padLeft - padRight);
@@ -85,10 +93,9 @@ export function LineChart({
     labels.length > 1 ? padLeft + index * step : padLeft + plotWidth / 2;
   const yAt = (value: number) => PAD_TOP + plotHeight * (1 - (value - bottom) / span);
 
-  const ticks = Array.from(
-    { length: yTicks + 1 },
-    (_, index) => bottom + (span / yTicks) * index,
-  );
+  const ticks =
+    fitted?.ticks ??
+    Array.from({ length: yTicks + 1 }, (_, index) => bottom + (span / yTicks) * index);
 
   // 依可用寬度決定要放幾個 x 軸標籤，每個標籤大約需要 40–46px。
   const maxLabels = Math.max(2, Math.floor(plotWidth / (compact ? 40 : 46)));
@@ -293,6 +300,38 @@ function buildSegments(values: (number | null)[]): { i: number; v: number }[][] 
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * 依資料最小、最大值收一組整數刻度，上下只留一點空隙。
+ * 全部是正數時不把下限拉到負的；刻度用 1/2/2.5/5/10 的步進，避免很密的細線。
+ */
+function fitAxis(values: number[], maxTicks: number): { bottom: number; top: number; ticks: number[] } {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min;
+  const pad = span === 0 ? Math.max(Math.abs(max) * 0.08, 0.5) : span * 0.18;
+  const rawBottom = min - pad;
+  const rawTop = max + pad;
+  const rough = Math.max((rawTop - rawBottom) / Math.max(1, maxTicks), Number.EPSILON);
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step =
+    [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((value) => value >= rough) ??
+    10 * magnitude;
+
+  let bottom = Math.floor(rawBottom / step) * step;
+  const top = Math.ceil(rawTop / step) * step;
+  if (min >= 0 && bottom < 0) bottom = 0;
+
+  const ticks: number[] = [];
+  const places = step >= 1 ? 0 : Math.min(4, (step.toString().split(".")[1] ?? "").length);
+  for (let value = bottom; value <= top + step * 0.001; value += step) {
+    const rounded = places === 0 ? Math.round(value) : Number(value.toFixed(places));
+    if (ticks.length === 0 || ticks[ticks.length - 1] !== rounded) ticks.push(rounded);
+    if (ticks.length > 8) break;
+  }
+  const last = ticks[ticks.length - 1] ?? top;
+  return { bottom: ticks[0] ?? bottom, top: last, ticks };
 }
 
 /** 找一個能被刻度數整除的上限，讓 y 軸出現 0/20/40 這類好讀的數字。 */

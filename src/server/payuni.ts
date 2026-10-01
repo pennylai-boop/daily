@@ -301,15 +301,19 @@ export function isPeriodCallback(callback: PayuniCallback): boolean {
 
 export function toPeriodCallback(callback: PayuniCallback): PeriodCallback {
   const data = callback.raw;
-  const thisPeriod = Number(data.ThisPeriod ?? 0);
+  // 支付頁前景返回沒有 ThisPeriod／PeriodOrderNo（那兩個只出現在每期授權通知）。
+  // 缺期數時視為第 1 期，才不會被當成一筆對不上的續期而跳過入帳。
+  const rawPeriod = data.ThisPeriod;
+  const thisPeriod =
+    rawPeriod === undefined || rawPeriod === "" ? 1 : Number(rawPeriod) || 1;
   return {
     status: callback.status,
     message: callback.message,
     merTradeNo: callback.merTradeNo,
     periodTradeNo: data.PeriodTradeNo ?? "",
-    periodOrderNo: data.PeriodOrderNo || (thisPeriod ? `${callback.merTradeNo}_${thisPeriod}` : ""),
+    periodOrderNo: data.PeriodOrderNo || `${callback.merTradeNo}_${thisPeriod}`,
     tradeNo: callback.tradeNo || data.TradeNo || "",
-    authAmt: Number(data.AuthAmt ?? data.PeriodAmt ?? callback.tradeAmt ?? 0),
+    authAmt: Number(data.AuthAmt ?? data.PeriodAmt ?? data.FAmt ?? callback.tradeAmt ?? 0),
     thisPeriod,
     nextAuthDate: data.NextAuthDate ?? "",
     payerEmail: data.PayerEmail ?? "",

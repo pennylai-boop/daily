@@ -50,12 +50,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // data-theme 與 data-platform 由下面兩支 script 在 hydration 前寫入，因此忽略這層的屬性比對。
-    <html lang="zh-Hant-TW" className="h-full antialiased" suppressHydrationWarning>
+    <html lang="zh-Hant-TW" className="h-full max-w-full overflow-x-clip antialiased" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
         <script dangerouslySetInnerHTML={{ __html: platformBootstrapScript }} />
       </head>
-      <body className="flex min-h-full flex-col font-sans">
+      <body className="flex min-h-full min-w-0 max-w-full flex-col font-sans">
         <AppShell>{children}</AppShell>
         <LiffBootstrap />
         <ServiceWorkerRegistrar />

@@ -14,8 +14,9 @@ import type { CustomMood, DayEntry, EntryPhoto, Routine } from "./types";
  * 這裡用 Canvas 手繪而不是截取 DOM：分享出去的是一張排版乾淨的紀錄卡，
  * 不會夾帶輸入框、按鈕等編輯介面，傳到 LINE 也能直接看完整內容。
  */
-const WIDTH = 1080;
-const PADDING = 76;
+/** 窄一點，中文大約一行 18～20 字，分享圖才不會被拉得很寬、字很散。 */
+const WIDTH = 680;
+const PADDING = 52;
 const CONTENT_WIDTH = WIDTH - PADDING * 2;
 
 /** 分享圖：白底＋3% 橘、灰點、橘色粗框。 */
@@ -591,10 +592,30 @@ export type PreparedDayImage = {
   fileName: string;
   blob: Blob;
   previewUrl: string;
+  /** 小張 JPEG，給 LINE Messaging API 的 previewImageUrl（限制 1MB）用。 */
+  thumbnailBlob: Blob;
 };
 
 export function revokePreparedImage(image: PreparedDayImage | null) {
   if (image?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
+}
+
+/** 從分享圖 canvas 縮出一張小 JPEG，供 LINE 推播當預覽圖。 */
+function toThumbnail(canvas: HTMLCanvasElement, maxWidth = 480): Promise<Blob> {
+  const scale = Math.min(1, maxWidth / canvas.width);
+  const small = document.createElement("canvas");
+  small.width = Math.round(canvas.width * scale);
+  small.height = Math.round(canvas.height * scale);
+  const ctx = small.getContext("2d");
+  if (!ctx) return toBlob(canvas);
+  ctx.drawImage(canvas, 0, 0, small.width, small.height);
+  return new Promise((resolve, reject) => {
+    small.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("預覽圖產生失敗"))),
+      "image/jpeg",
+      0.72,
+    );
+  });
 }
 
 export async function prepareDayImage(
@@ -604,12 +625,13 @@ export async function prepareDayImage(
   customMoods: CustomMood[] = [],
 ): Promise<PreparedDayImage> {
   const canvas = await buildDayImage(entry, routines, checkedIds, customMoods);
-  const blob = await toBlob(canvas);
+  const [blob, thumbnailBlob] = await Promise.all([toBlob(canvas), toThumbnail(canvas)]);
   return {
     date: entry.date,
     fileName: `daily-${entry.date}.png`,
     blob,
     previewUrl: URL.createObjectURL(blob),
+    thumbnailBlob,
   };
 }
 

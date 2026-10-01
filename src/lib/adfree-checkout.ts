@@ -64,13 +64,20 @@ async function runCheckout(input?: {
   }
 }
 
-export async function fetchAdFreeUntil(accessToken: string): Promise<string | null> {
-  const response = await fetch("/api/adfree/status", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { until?: string | null };
-  return typeof data.until === "string" ? data.until : null;
+/** `ok: false` 代表這次沒問到，呼叫端應沿用本機效期，不要把已訂閱的人變回有廣告。 */
+export async function fetchAdFreeUntil(
+  accessToken: string,
+): Promise<{ ok: true; until: string | null } | { ok: false }> {
+  try {
+    const response = await fetch("/api/adfree/status", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return { ok: false };
+    const data = (await response.json()) as { until?: string | null };
+    return { ok: true, until: typeof data.until === "string" ? data.until : null };
+  } catch {
+    return { ok: false };
+  }
 }
 
 export interface AdFreeSubscriptionView {

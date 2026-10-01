@@ -1,4 +1,4 @@
-import { ADFREE_DAYS } from "@/lib/adfree";
+import { ADFREE_DAYS, isAdFreeActive } from "@/lib/adfree";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 /**
@@ -77,11 +77,80 @@ export async function extendAdFree(userId: string, email: string): Promise<strin
     p_days: ADFREE_DAYS,
   });
 
-  if (error) {
-    console.error("[adfree] 延長效期失敗：", error.message);
+  if (!error && typeof data === "string") return data;
+  if (error) console.error("[adfree] 延長效期 RPC 失敗，改直接寫入：", error.message);
+
+  const { data: existing, error: readError } = await db
+    .from("adfree_entitlements")
+    .select("expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (readError) {
+    console.error("[adfree] 讀取效期失敗：", readError.message);
     return null;
   }
-  return typeof data === "string" ? data : null;
+
+  const now = Date.now();
+  const current = typeof existing?.expires_at === "string" ? Date.parse(existing.expires_at) : NaN;
+  const base = Number.isFinite(current) ? Math.max(current, now) : now;
+  const next = new Date(base + ADFREE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { error: writeError } = await db.from("adfree_entitlements").upsert(
+    {
+      user_id: userId,
+      email: email || "",
+      expires_at: next,
+      updated_at: new Date(now).toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+  if (writeError) {
+    console.error("[adfree] 直接寫入效期失敗：", writeError.message);
+    return null;
+  }
+  return next;
+}
+
+/**
+ * 已付款但效期沒寫上的訂單（Notify 失敗、或延長效期當下出錯）在下次查狀態時補上。
+ * 只處理 status=paid 且還沒標過 entitlement 的單，避免把已經用完的舊訂閱又加 30 天。
+ */
+export async function repairUnappliedAdFree(
+  userId: string,
+  email: string | null,
+): Promise<void> {
+  const current = await getAdFreeUntil(userId);
+  if (isAdFreeActive(current)) return;
+
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("sponsor_orders")
+    .select("mer_trade_no, email")
+    .eq("user_id", userId)
+    .eq("product", "adfree")
+    .eq("status", "paid")
+    .is("entitlement_applied_at", null)
+    .order("paid_at", { ascending: true })
+    .limit(6);
+
+  if (error) {
+    console.error("[adfree] 查詢未入帳訂單失敗：", error.message);
+    return;
+  }
+  if (!data?.length) return;
+
+  for (const row of data) {
+    const orderEmail = typeof row.email === "string" ? row.email : "";
+    const next = await extendAdFree(userId, orderEmail || email || "");
+    if (!next) continue;
+    const { error: markError } = await db
+      .from("sponsor_orders")
+      .update({
+        entitlement_applied_at: new Date().toISOString(),
+        thank_you_error: null,
+      })
+      .eq("mer_trade_no", row.mer_trade_no);
+    if (markError) console.error("[adfree] 標記效期已入帳失敗：", markError.message);
+  }
 }
 
 /**

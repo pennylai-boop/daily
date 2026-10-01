@@ -17,8 +17,7 @@ import {
 import { todayIso } from "@/lib/date";
 import {
   buildRangeWindow,
-  metricCompareSeries,
-  moodSeries,
+  metricCompareGroups,
   RANGE_OPTIONS,
   routineInsightChart,
   timerMinutesSeries,
@@ -70,7 +69,7 @@ export function InsightsScreen() {
           <EmptyState
             emoji="📈"
             title="還沒有可以回顧的內容"
-            description="寫下第一篇紀錄或設定定期事項後，這裡會出現完成率與心情趨勢。"
+            description="寫下第一篇紀錄或設定定期事項後，這裡會出現完成率與紀錄比較。"
             action={<TextLink href={`/entry/${today}`}>開始記錄今天 →</TextLink>}
           />
         </Card>
@@ -151,23 +150,6 @@ export function InsightsScreen() {
           </Card>
         ))}
 
-      <Card className="px-4 py-4 sm:px-5">
-        <SectionHeading
-          title="心情趨勢"
-          description={`${rangeLabel}的心情平均分數，5 分最愉快`}
-        />
-        <div className="mt-4">
-          <LineChart
-            labels={window.buckets.map((bucket) => bucket.label)}
-            series={moodSeries(state, window.buckets)}
-            yMin={1}
-            yMax={5}
-            yTicks={4}
-            formatValue={(value) => value.toFixed(1)}
-            emptyHint="這段期間還沒有選過心情表情。"
-          />
-        </div>
-      </Card>
     </div>
   );
 }
@@ -233,64 +215,78 @@ function MetricCompareCard({
   routines: Routine[];
   rangeLabel: string;
 }) {
-  const series = useMemo(
-    () => metricCompareSeries(state, buckets, routines),
+  const groups = useMemo(
+    () => metricCompareGroups(state, buckets, routines),
     [state, buckets, routines],
   );
-  const [picked, setPicked] = useState<string[] | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
 
-  if (series.length === 0) return null;
+  if (groups.length === 0) return null;
 
-  const visibleIds = picked ?? series.map((item) => item.id);
-  const visible = series.filter((item) => visibleIds.includes(item.id));
-
-  const toggle = (id: string) => {
-    const current = picked ?? series.map((item) => item.id);
-    setPicked(
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
-  };
+  const fallback = `all:${groups[0].routineId}`;
+  const choice =
+    picked &&
+    groups.some(
+      (group) =>
+        picked === `all:${group.routineId}` ||
+        group.series.some((item) => picked === `field:${item.id}`),
+    )
+      ? picked
+      : fallback;
+  const visible = seriesForChoice(groups, choice);
 
   return (
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="紀錄比較"
-        description={`${rangeLabel}內可同時疊多個數值欄位，方便對照體重、腰圍這類尺寸。`}
+        description={`${rangeLabel}一次看一項。可以選單一欄位（例如體脂），也可以選整份紀錄（例如體重紀錄的所有欄位）。`}
+        action={
+          <Select
+            aria-label="選擇要比較的紀錄"
+            className="w-[min(14rem,70vw)] sm:w-56"
+            value={choice}
+            onChange={(event) => setPicked(event.target.value)}
+          >
+            {groups.map((group) => (
+              <optgroup key={group.routineId} label={group.label}>
+                <option value={`all:${group.routineId}`}>{group.label}（全部）</option>
+                {group.series.map((item) => (
+                  <option key={item.id} value={`field:${item.id}`}>
+                    {item.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        }
       />
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {series.map((item) => {
-          const on = visibleIds.includes(item.id);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggle(item.id)}
-              className={
-                on
-                  ? "inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent-tint px-2.5 py-1 text-xs font-medium text-accent"
-                  : "inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted"
-              }
-            >
-              <span
-                aria-hidden
-                className="size-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: on ? item.color : "var(--line-strong)" }}
-              />
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
       <div className="mt-4">
         <LineChart
           labels={buckets.map((bucket) => bucket.label)}
           series={visible}
+          yScale="fit"
+          yTicks={3}
           formatValue={(value) => String(Math.round(value * 100) / 100)}
-          emptyHint="先選一個以上的欄位，或這段期間還沒有填寫紀錄。"
-          showLegend={false}
+          emptyHint="這段期間還沒有填寫這項紀錄。"
+          showLegend={visible.length > 1}
         />
       </div>
     </Card>
   );
+}
+
+function seriesForChoice(
+  groups: ReturnType<typeof metricCompareGroups>,
+  choice: string,
+) {
+  if (choice.startsWith("all:")) {
+    const routineId = choice.slice(4);
+    return groups.find((group) => group.routineId === routineId)?.series ?? [];
+  }
+  const fieldId = choice.startsWith("field:") ? choice.slice(6) : choice;
+  for (const group of groups) {
+    const found = group.series.find((item) => item.id === fieldId);
+    if (found) return [found];
+  }
+  return groups[0]?.series ?? [];
 }

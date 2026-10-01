@@ -14,12 +14,12 @@ export function PeriodGoalsStatus({ state, today }: { state: DailyState; today: 
   const monthItems = state.monthGoals[monthKey(today)] ?? [];
 
   return (
-    <Card className="px-4 py-4 sm:px-5">
+    <Card className="max-w-sm px-4 py-4 sm:px-5">
       <SectionHeading
         title="目標完成狀態"
         description="本月、本週與今日目標。可在月曆或紀錄頁勾選。"
       />
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+      <div className="mt-4 flex flex-col gap-3">
         <GoalColumn
           title="月目標"
           hint={today.slice(0, 7).replace("-", " / ")}

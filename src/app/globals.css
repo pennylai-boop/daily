@@ -129,13 +129,22 @@ html,
   color-scheme: dark;
 }
 
+html {
+  overflow-x: clip;
+  max-width: 100%;
+  width: 100%;
+  overscroll-behavior-x: none;
+}
+
 body {
   background-color: var(--paper);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* 手機上避免橫向捲動與點擊時的灰色閃光。 */
-  overflow-x: hidden;
+  /* 橫向溢出鎖在 html，避免 body overflow-x:hidden 讓 fixed 底欄算錯 containing block。 */
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }

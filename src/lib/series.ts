@@ -366,6 +366,35 @@ export function routineInsightChart(
   };
 }
 
+export interface MetricCompareGroup {
+  routineId: string;
+  /** 例如「⚖️ 體重紀錄」。 */
+  label: string;
+  series: ChartSeries[];
+}
+
+/** 回顧的紀錄比較：一份紀錄事項一組，組內是各欄位（體重、體脂…）。只留這段期間有數字的欄位。 */
+export function metricCompareGroups(
+  state: DailyState,
+  buckets: Bucket[],
+  routines: Routine[],
+): MetricCompareGroup[] {
+  const groups: MetricCompareGroup[] = [];
+  for (const routine of routines) {
+    if (routine.template !== "metric") continue;
+    const series = metricSeries(state, buckets, routine).filter((item) =>
+      item.values.some((value) => value !== null),
+    );
+    if (series.length === 0) continue;
+    groups.push({
+      routineId: routine.id,
+      label: `${routine.emoji} ${routine.title}`.trim(),
+      series,
+    });
+  }
+  return groups;
+}
+
 /** 所有紀錄事項的欄位攤成可疊在同一張圖上的曲線。 */
 export function metricCompareSeries(
   state: DailyState,

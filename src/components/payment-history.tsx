@@ -92,7 +92,7 @@ export function PaymentHistory() {
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="付款紀錄"
-        description="包含贊助、卜卦點數與無廣告訂閱。登入後下的單會綁在帳號上；舊的贊助若信箱相同也會列出來。"
+        description="包含贊助與無廣告訂閱。登入後下的單會綁在帳號上；以前的卜卦點數訂單若屬這個帳號也會列出來。"
         action={
           loggedIn ? undefined : (
             <Button

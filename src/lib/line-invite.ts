@@ -87,6 +87,9 @@ export async function copyInviteUrl(code: string): Promise<void> {
 export const LINE_PICK_QUERY = "pickLine";
 export const LINE_HANDOFF_QUERY = "handoff";
 export const LINE_PICKED_QUERY = "picked";
+/** 從 LINE 群組裡開啟、要把該群組綁成「直接推播」對象時帶的參數。 */
+export const LINE_BIND_QUERY = "bindLine";
+export const LINE_BOUND_QUERY = "bound";
 
 /**
  * Android WebView 常常沒有 navigator.clipboard（需要 HTTPS 與額外權限），

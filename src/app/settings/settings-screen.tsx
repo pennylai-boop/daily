@@ -15,7 +15,15 @@ import { SIGN_OUT_CONFIRM, maskLineUserId, performSignOut } from "@/lib/account"
 import { AdFreeCard } from "@/components/adfree-card";
 import { LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 import { todayIso } from "@/lib/date";
-import { copyInviteUrl, LINE_INVITE_QUERY, LINE_PICK_QUERY, LINE_PICKED_QUERY, shareInvite } from "@/lib/line-invite";
+import {
+  copyInviteUrl,
+  LINE_BOUND_QUERY,
+  LINE_INVITE_QUERY,
+  LINE_PICK_QUERY,
+  LINE_PICKED_QUERY,
+  shareInvite,
+} from "@/lib/line-invite";
+import { startLineGroupBind } from "@/lib/line-push";
 import { sessionAccessToken } from "@/lib/session-token";
 import { hasSession } from "@/lib/supabase-sync";
 import { isShareId } from "@/lib/storage";
@@ -111,27 +119,13 @@ export function SettingsScreen({
 
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading title="關於天天" />
-        <div className="mt-3 flex items-start justify-between gap-4">
-          <dl className="min-w-0 flex-1 space-y-2 text-[13px]">
-            {[
-              ["產品名稱", "天天 daily"],
-              ["網域", "daily.introvista.ai"],
-              ["使用地區", "台灣（繁體中文）"],
-            ].map(([label, value]) => (
-              <div key={label} className="flex gap-3">
-                <dt className="w-20 shrink-0 text-ink-subtle">{label}</dt>
-                <dd className="text-ink-muted">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="flex shrink-0 flex-col items-stretch gap-2">
-            <Button variant="secondary" onClick={exportJson} disabled={!ready}>
-              匯出 JSON 備份
-            </Button>
-            <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={!ready}>
-              匯入備份
-            </Button>
-          </div>
+        <div className="mt-3 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+          <Button variant="secondary" onClick={exportJson} disabled={!ready}>
+            匯出 JSON 備份
+          </Button>
+          <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={!ready}>
+            匯入備份
+          </Button>
         </div>
         <input
           ref={fileInput}
@@ -419,6 +413,7 @@ function ShareTargetsCard() {
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [binding, setBinding] = useState(false);
   const [shareImage, setShareImage] = useState<PreparedDayImage | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const shareImageRef = useRef<PreparedDayImage | null>(null);
@@ -456,6 +451,19 @@ function ShareTargetsCard() {
     }
   };
 
+  const bindGroup = async () => {
+    setBinding(true);
+    setNote(null);
+    const result = await startLineGroupBind();
+    if ("error" in result) {
+      setNote(result.error);
+      setBinding(false);
+      return;
+    }
+    setNote("正在打開 LINE，請在要直接發送的群組裡完成綁定。");
+    window.location.assign(result.liffUrl);
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -463,8 +471,14 @@ function ShareTargetsCard() {
       window.location.replace(`/line-pick?${params.toString()}`);
       return;
     }
-    if (params.get(LINE_PICKED_QUERY) !== "1" && params.get(LINE_PICKED_QUERY) !== "0") return;
-    const ok = params.get(LINE_PICKED_QUERY) === "1";
+    const boundParam = params.get(LINE_BOUND_QUERY);
+    const pickedParam = params.get(LINE_PICKED_QUERY);
+    if (boundParam !== "1" && boundParam !== "0" && pickedParam !== "1" && pickedParam !== "0") {
+      return;
+    }
+    const isBind = boundParam === "1" || boundParam === "0";
+    const ok = (isBind ? boundParam : pickedParam) === "1";
+    params.delete(LINE_BOUND_QUERY);
     params.delete(LINE_PICKED_QUERY);
     const search = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
@@ -476,11 +490,19 @@ function ShareTargetsCard() {
         }
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
-      setNote(
-        ok
-          ? "已加回這個帳號。LINE 不會回傳群組或好友名稱，之後按傳送今天會再開一次列表。"
-          : "沒有選成，已回到網頁。",
-      );
+      if (isBind) {
+        setNote(
+          ok
+            ? "已綁定 LINE 群組，之後在傳送今天按「直接發送」就會傳到那裡。"
+            : "沒有綁成。請在要直接發送的 LINE 群組裡開啟綁定連結。",
+        );
+      } else {
+        setNote(
+          ok
+            ? "已加回這個帳號。LINE 不會回傳群組或好友名稱，之後按傳送今天會再開一次列表。"
+            : "沒有選成，已回到網頁。",
+        );
+      }
     })();
   }, []);
 
@@ -533,12 +555,15 @@ function ShareTargetsCard() {
     <Card className="px-4 py-4 sm:px-5">
       <SectionHeading
         title="常傳的 LINE 對象"
-        description="按新增會打開 LINE 選好友、群組或聊天室。選完會寫回這個網頁帳號並跳回來，LINE 裡不必再登入天天。LINE 不會回傳聊天室名稱。傳送今天會先預覽，再下載或發送。"
+        description="「新增」打開 LINE 選好友或群組，之後傳送今天要再選一次。「綁定 LINE 群組」則要在該群組裡開啟連結，綁定後傳送今天可直接發送、不跳選單（需官方帳號在群組裡，且有每月推播額度）。"
       />
 
-      <div className="mt-4">
-        <Button variant="secondary" disabled={picking} onClick={() => void addFromLine()}>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="secondary" disabled={picking || binding} onClick={() => void addFromLine()}>
           {picking ? "開啟 LINE…" : "新增"}
+        </Button>
+        <Button variant="secondary" disabled={picking || binding} onClick={() => void bindGroup()}>
+          {binding ? "開啟 LINE…" : "綁定 LINE 群組"}
         </Button>
       </div>
 
@@ -549,7 +574,10 @@ function ShareTargetsCard() {
               key={target.id}
               className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2"
             >
-              <span className="min-w-0 truncate text-sm text-ink">{target.name}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 truncate text-sm text-ink">{target.name}</span>
+                {target.lineGroupId ? <Chip tone="accent">直接發送</Chip> : null}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"

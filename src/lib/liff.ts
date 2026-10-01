@@ -24,6 +24,16 @@ export interface LiffLike {
   }>;
   isInClient: () => boolean;
   isApiAvailable: (name: string) => boolean;
+  /**
+   * 從哪個情境開啟的 LIFF。從群組／多人聊天室裡開啟時帶得到 groupId／roomId，
+   * 用來綁定「直接推播」的對象；從外部連結或一對一開啟時沒有。
+   */
+  getContext?: () => {
+    type?: "utou" | "group" | "room" | "external" | "none";
+    groupId?: string;
+    roomId?: string;
+    userId?: string;
+  } | null;
   /** 使用者按取消時回傳 null。isMultiple 可一次選多個聊天室。 */
   shareTargetPicker: (
     messages: unknown[],

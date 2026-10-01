@@ -208,6 +208,12 @@ export interface LineShareTarget {
   name: string;
   /** 最近一次選用的時間，用來把常用的排前面；從未用過為 null。 */
   lastUsedAt: string | null;
+  /**
+   * LINE 群組／聊天室 ID。有值時「傳送今天」可由伺服器直接推播、不跳選對象畫面；
+   * null 表示只知道名字，仍要走 shareTargetPicker。
+   * 只能在該群組裡開啟天天 daily 的 LIFF 時由 liff.getContext() 取得（見 /line-bind）。
+   */
+  lineGroupId: string | null;
 }
 
 export interface LineSettings {

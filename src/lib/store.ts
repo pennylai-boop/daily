@@ -345,7 +345,8 @@ export async function refreshAdFreeStatus(): Promise<void> {
     return;
   }
   try {
-    setAdFreeUntil(await fetchAdFreeUntil(session.access_token));
+    const result = await fetchAdFreeUntil(session.access_token);
+    if (result.ok) setAdFreeUntil(result.until);
   } catch {
     // 暫時問不到就沿用本機快取，下次再試。
   }
@@ -372,7 +373,12 @@ export async function addLineTarget(name: string): Promise<LineShareTarget | nul
     return found;
   }
 
-  const target: LineShareTarget = { id: createId(), name: trimmed, lastUsedAt: null };
+  const target: LineShareTarget = {
+    id: createId(),
+    name: trimmed,
+    lastUsedAt: null,
+    lineGroupId: null,
+  };
   updateLineTargets((targets) => [...targets, target]);
   if (hasSession()) await pushLineTarget(target);
   return target;
@@ -388,9 +394,10 @@ export async function refreshLineTargets(): Promise<void> {
     const byName = new Map(current.settings.line.targets.map((target) => [target.name, target]));
     for (const target of remote) {
       const local = byName.get(target.name);
-      if (!local || (target.lastUsedAt ?? "") > (local.lastUsedAt ?? "")) {
-        byName.set(target.name, target);
-      }
+      const newer = !local || (target.lastUsedAt ?? "") > (local.lastUsedAt ?? "");
+      // 群組綁定只要任一邊有就保留，換裝置回來才不會把剛綁的群組洗掉。
+      const lineGroupId = target.lineGroupId ?? local?.lineGroupId ?? null;
+      byName.set(target.name, { ...(newer ? target : local!), lineGroupId });
     }
     return {
       ...current,

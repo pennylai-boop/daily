@@ -365,6 +365,8 @@ function normalizeLineSettings(value: LineSettings | undefined): LineSettings {
         id: typeof target.id === "string" && target.id ? target.id : createId(),
         name: typeof target.name === "string" ? target.name.trim().slice(0, 30) : "",
         lastUsedAt: typeof target.lastUsedAt === "string" ? target.lastUsedAt : null,
+        lineGroupId:
+          typeof target.lineGroupId === "string" && target.lineGroupId ? target.lineGroupId : null,
       }))
       .filter((target) => target.name.length > 0);
     return { targets };
@@ -372,7 +374,9 @@ function normalizeLineSettings(value: LineSettings | undefined): LineSettings {
 
   const legacyName = (value as unknown as { groupName?: string })?.groupName?.trim() ?? "";
   if (!legacyName) return { targets: [] };
-  return { targets: [{ id: createId(), name: legacyName.slice(0, 30), lastUsedAt: null }] };
+  return {
+    targets: [{ id: createId(), name: legacyName.slice(0, 30), lastUsedAt: null, lineGroupId: null }],
+  };
 }
 
 /** v2 以前 profile 存的是使用者自己打的 email，沒有經過驗證，改版後不再保留。 */

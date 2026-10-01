@@ -18,7 +18,7 @@ import { RoutineForm } from "@/components/routines/routine-form";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { InfoHint } from "@/components/ui/info-hint";
-import { Card, Chip, EmptyState, SectionHeading } from "@/components/ui/surfaces";
+import { Card, EmptyState, SectionHeading } from "@/components/ui/surfaces";
 import {
   addDays,
   addMonths,
@@ -353,64 +353,62 @@ function RoutineRow({
   onArchive: () => void;
   onDelete: () => void;
 }) {
-  const rateBar =
-    rate === null ? null : (
-      <div className="flex flex-1 items-center gap-2 sm:flex-none">
-        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-line sm:w-16 sm:flex-none">
-          <span
-            className={cn("block h-full rounded-full", rate >= 0.6 ? "bg-accent" : "bg-brand")}
-            style={{ width: `${Math.round(rate * 100)}%` }}
-          />
-        </span>
-        <span className="w-9 shrink-0 text-right text-xs tabular-nums text-ink-muted">
-          {Math.round(rate * 100)}%
-        </span>
-      </div>
-    );
+  const metaLine = [
+    routine.template && getTemplate(routine.template).name !== routine.title
+      ? getTemplate(routine.template).name
+      : null,
+    dueToday ? (doneToday ? "今天已完成" : "今天要做") : null,
+    routine.shared === false ? "擷圖隱藏" : null,
+    describeFrequency(routine.frequency),
+    routine.note || null,
+    rate === null ? null : `${Math.round(rate * 100)}%`,
+  ]
+    .filter(Boolean)
+    .join("・");
 
   // relative z-10：整張卡片是連往統計頁的連結（下方的 overlay），按鈕要疊在它上面才點得到。
   const actions = (
-    <div className="relative z-10 flex shrink-0 items-center gap-1">
+    <div className="relative z-10 flex shrink-0 items-center">
       <Button
         size="sm"
         variant="ghost"
         aria-label={`把「${routine.title}」往上移`}
-        className="size-10 shrink-0 px-0"
+        className="!size-7 shrink-0 !px-0"
         disabled={!canMoveUp}
         onClick={() => onMove(-1)}
       >
-        <ChevronUpIcon className="size-6" strokeWidth={2} />
+        <ChevronUpIcon className="size-4" strokeWidth={2} />
       </Button>
       <Button
         size="sm"
         variant="ghost"
         aria-label={`把「${routine.title}」往下移`}
-        className="size-10 shrink-0 px-0"
+        className="!size-7 shrink-0 !px-0"
         disabled={!canMoveDown}
         onClick={() => onMove(1)}
       >
-        <ChevronDownIcon className="size-6" strokeWidth={2} />
+        <ChevronDownIcon className="size-4" strokeWidth={2} />
       </Button>
       <Button
         size="sm"
         variant="ghost"
         aria-label={`編輯「${routine.title}」的設定`}
-        className="size-10 shrink-0 px-0"
+        className="!size-7 shrink-0 !px-0"
         onClick={onEdit}
       >
-        <PencilIcon className="size-6" strokeWidth={2} />
+        <PencilIcon className="size-4" strokeWidth={2} />
       </Button>
-      <Button size="sm" variant="ghost" className="h-8" onClick={onArchive}>
+      <Button size="sm" variant="ghost" className="!h-7 !px-1.5 text-xs" onClick={onArchive}>
         封存
       </Button>
       <Button
         size="sm"
         variant="ghost"
         aria-label={`刪除「${routine.title}」`}
-        className="size-10 shrink-0 px-0 text-alert"
+        className="!size-7 shrink-0 !px-0 text-alert"
         onClick={onDelete}
       >
-        <TrashIcon className="size-6" strokeWidth={2} />
+        <TrashIcon className="size-4" strokeWidth={2} />
       </Button>
     </div>
   );
@@ -418,7 +416,7 @@ function RoutineRow({
   return (
     <div
       className={cn(
-        "card group relative px-4 py-3.5 transition-colors hover:border-line-strong",
+        "card group relative px-3 py-1.5 transition-colors hover:border-line-strong",
         dragging && "opacity-55",
       )}
     >
@@ -433,13 +431,13 @@ function RoutineRow({
         <span className="sr-only">查看「{routine.title}」的統計</span>
       </Link>
 
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           draggable
           aria-label={`拖曳以調整「${routine.title}」的順序`}
           title="拖曳以調整順序"
-          className="relative z-10 mt-1 flex size-8 shrink-0 cursor-grab items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-muted hover:text-ink active:cursor-grabbing"
+          className="relative z-10 flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-ink-subtle hover:bg-surface-muted hover:text-ink active:cursor-grabbing"
           onClick={(event) => event.preventDefault()}
           onDragStart={(event) => {
             event.dataTransfer.effectAllowed = "move";
@@ -448,49 +446,24 @@ function RoutineRow({
           }}
           onDragEnd={onDragEnd}
         >
-          <GripIcon className="size-5" />
+          <GripIcon className="size-4" />
         </button>
         <span
           aria-hidden
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-lg"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-base leading-none"
         >
           {routine.emoji}
         </span>
 
         <div className="min-w-0 flex-1">
-          {/* 頻率與備註和標題同一列：只有「每天」兩個字的話，多佔一整行很浪費。 */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3 className="text-[15px] font-semibold text-ink group-hover:text-brand-strong">
-              {routine.title}
-            </h3>
-            {routine.template && getTemplate(routine.template).name !== routine.title ? (
-              <Chip>
-                {getTemplate(routine.template).emoji} {getTemplate(routine.template).name}
-              </Chip>
-            ) : null}
-            {dueToday ? (
-              <Chip tone={doneToday ? "accent" : "brand"}>
-                {doneToday ? "今天已完成" : "今天要做"}
-              </Chip>
-            ) : null}
-            {routine.shared === false ? <Chip>擷圖隱藏</Chip> : null}
-            <span className="text-[13px] text-ink-muted">
-              {describeFrequency(routine.frequency)}
-              {routine.note ? `・${routine.note}` : ""}
-            </span>
-          </div>
+          <h3 className="truncate text-sm font-semibold leading-tight text-ink group-hover:text-brand-strong">
+            {routine.title}
+          </h3>
+          {metaLine ? (
+            <p className="truncate text-[11px] leading-tight text-ink-muted">{metaLine}</p>
+          ) : null}
         </div>
 
-        {/* 桌機：完成率與操作按鈕跟在同一行。 */}
-        <div className="hidden items-center gap-3 sm:flex">
-          {rateBar}
-          {actions}
-        </div>
-      </div>
-
-      {/* 手機：另起一行，避免標題被壓成兩三個字。 */}
-      <div className="mt-2.5 flex items-center gap-3 sm:hidden">
-        {rateBar ?? <span className="flex-1" />}
         {actions}
       </div>
     </div>

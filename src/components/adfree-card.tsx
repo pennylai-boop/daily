@@ -44,6 +44,18 @@ export function AdFreeCard({
     };
   }, [loggedIn]);
 
+  // 剛從金流回來時，效期可能晚一步寫上。在還沒生效前多問幾次，不必手動重新整理。
+  useEffect(() => {
+    if (!loggedIn || !notice || active) return;
+    let left = 8;
+    const timer = window.setInterval(() => {
+      left -= 1;
+      void refreshAdFreeStatus();
+      if (left <= 0) window.clearInterval(timer);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [loggedIn, notice, active]);
+
   const cancel = async () => {
     if (!window.confirm(CANCEL_CONFIRM)) return;
     setBusy(true);

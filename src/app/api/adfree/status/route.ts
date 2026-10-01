@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server";
 
-import { getAdFreeSubscription } from "@/server/adfree";
+import { getAdFreeSubscription, repairUnappliedAdFree } from "@/server/adfree";
 import { requireUser } from "@/server/sharing";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   const auth = await requireUser(request);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
+  await repairUnappliedAdFree(auth.userId, auth.email);
   const subscription = await getAdFreeSubscription(auth.userId);
   return NextResponse.json({
     until: subscription.until,

@@ -14,7 +14,6 @@ import {
   FocusIcon,
   GearIcon,
   HeartIcon,
-  HexagramIcon,
   MenuIcon,
   RepeatIcon,
   SparkIcon,
@@ -22,7 +21,6 @@ import {
   UsersIcon,
 } from "@/components/icons";
 import { PepTalkBanner } from "@/components/pep-talk-banner";
-import { PointsBadge } from "@/components/points-badge";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { cn } from "@/components/ui/cn";
 import { resolvePepTalks } from "@/lib/pep-talk";
@@ -42,7 +40,6 @@ const NAV_ITEMS = [
   { href: "/focus", label: "專心模式", shortLabel: "專心", Icon: FocusIcon, primary: true, hideInIosApp: false },
   { href: "/insights", label: "回顧", shortLabel: "回顧", Icon: SparkIcon, primary: true, hideInIosApp: false },
   { href: "/shared", label: "被分享紀錄", shortLabel: "被分享", Icon: UsersIcon, primary: true, hideInIosApp: false },
-  { href: "/divination", label: "卜卦", shortLabel: "卜卦", Icon: HexagramIcon, primary: false, hideInIosApp: false },
   // 手機另有右上角橘色愛心；桌機側欄仍列出。iOS App 內隱藏（App Store 規則）。
   { href: "/support", label: "支持", shortLabel: "支持", Icon: HeartIcon, primary: false, hideInIosApp: true },
   { href: "/settings", label: "設定", shortLabel: "設定", Icon: GearIcon, primary: false, hideInIosApp: false },
@@ -130,11 +127,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col" data-ads={showAds ? "on" : "off"}>
+    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-clip" data-ads={showAds ? "on" : "off"}>
       <AuthLocalhostBounce />
       <PepTalkBanner />
 
-      <div className="flex w-full min-w-0 flex-1 flex-col lg:flex-row">
+      <div className="flex w-full min-w-0 max-w-full flex-1 flex-col overflow-x-clip lg:flex-row">
         {/* 側欄固定在視窗高度內：整頁再長也不跟著拉長，項目多時自己捲動。 */}
         <aside
           className={cn(
@@ -148,8 +145,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <BrandMark />
             <ProfileAvatar profile={state.settings.profile} size={36} />
           </div>
-          {/* 側欄只有 15rem 寬，點數擠不進品牌那一列，自己佔一行。 */}
-          <PointsBadge divination={state.divination} className="mt-5 self-start" />
           <SidebarNav pathname={pathname} className="mt-5" />
           {showLocalDataNote ? <LocalDataNote className="mt-auto pt-8" /> : null}
         </aside>
@@ -187,7 +182,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               <BrandMark compact />
               {/* 頂端列不放頭貼：身分與登出都收在左側抽屜底部。 */}
               <div className="ml-auto flex items-center gap-2">
-                <PointsBadge divination={state.divination} />
                 <Link
                   href="/support"
                   aria-label="支持"
@@ -205,14 +199,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 px-4 pt-5 pb-[calc(66px+var(--ad-bar-h)+env(safe-area-inset-bottom)+20px)] sm:px-6 lg:px-10 lg:pt-10 lg:pb-[calc(var(--ad-bar-h)+3.5rem)]">
+          <main className="min-w-0 max-w-full flex-1 overflow-x-clip px-4 pt-5 pb-[calc(66px+var(--ad-bar-h)+env(safe-area-inset-bottom)+20px)] sm:px-6 lg:px-10 lg:pt-10 lg:pb-[calc(var(--ad-bar-h)+3.5rem)]">
             {children}
           </main>
         </div>
 
         <nav
           aria-label="主要分頁"
-          className="fixed inset-x-0 bottom-0 z-40 w-full min-w-0 max-w-[100dvw] overflow-visible border-t border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)] shadow-[0_-2px_10px_rgba(17,24,39,0.08)] lg:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 w-full min-w-0 max-w-full overflow-x-clip border-t border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)] shadow-[0_-2px_10px_rgba(17,24,39,0.08)] lg:hidden"
         >
           {/* 列高 66px，對齊同系列 App 底部導覽。專心是往上微凸的圓鈕。 */}
           <ul className="flex h-[66px] w-full min-w-0">

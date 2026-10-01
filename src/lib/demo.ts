@@ -273,8 +273,13 @@ function buildDemoSettings(): AppSettings {
     },
     line: {
       targets: [
-        { id: createId(), name: "家人群", lastUsedAt: "2026-08-24T13:20:00.000Z" },
-        { id: createId(), name: "阿霖", lastUsedAt: null },
+        {
+          id: createId(),
+          name: "家人群",
+          lastUsedAt: "2026-08-24T13:20:00.000Z",
+          lineGroupId: null,
+        },
+        { id: createId(), name: "阿霖", lastUsedAt: null, lineGroupId: null },
       ],
     },
     recipients: [
