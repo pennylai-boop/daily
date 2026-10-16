@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { AppShell } from "@/components/app-shell";
 import { LiffBootstrap } from "@/components/liff-bootstrap";
 import { ServiceWorkerRegistrar } from "@/components/service-worker";
+import { SiteAnalyticsTracker } from "@/components/analytics/SiteAnalyticsTracker";
 import { platformBootstrapScript } from "@/lib/platform";
 import { themeBootstrapScript } from "@/lib/theme";
 
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="flex min-h-full min-w-0 max-w-full flex-col font-sans">
         <AppShell>{children}</AppShell>
+        <SiteAnalyticsTracker site="daily" />
         <LiffBootstrap />
         <ServiceWorkerRegistrar />
       </body>
