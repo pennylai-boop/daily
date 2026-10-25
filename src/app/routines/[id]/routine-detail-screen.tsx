@@ -50,6 +50,7 @@ import {
 import { useDailyStore } from "@/lib/store";
 import { countWords, getTemplate } from "@/lib/templates";
 import type { DailyState, IsoDate, Routine } from "@/lib/types";
+import { DataTable, TableScroll, Tr } from "@/components/data-table";
 
 export function RoutineDetailScreen({ id }: { id: string }) {
   const { state, ready } = useDailyStore();
@@ -315,10 +316,10 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
 
       <Card className="px-4 py-4 sm:px-5">
         <SectionHeading title="每月統計" description="從你正在看的月份往回算六個月" />
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[320px] text-[13px]">
+        <TableScroll className="mt-3 overflow-x-auto">
+          <DataTable tableKey="routine-monthly" className="w-full min-w-[320px] text-[13px]">
             <thead>
-              <tr className="border-b border-line text-left text-ink-muted">
+              <Tr className="border-b border-line text-left text-ink-muted">
                 <th scope="col" className="py-2 pr-3 font-medium">
                   月份
                 </th>
@@ -331,7 +332,7 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
                 <th scope="col" className="py-2 text-right font-medium">
                   完成率
                 </th>
-              </tr>
+              </Tr>
             </thead>
             <tbody>
               {months.map((monthStart) => {
@@ -342,7 +343,7 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
                   endOfMonth(monthStart),
                 );
                 return (
-                  <tr key={monthStart} className="border-b border-line/70 last:border-0">
+                  <Tr key={monthStart} className="border-b border-line/70 last:border-0">
                     <th scope="row" className="py-2 pr-3 text-left font-medium text-ink">
                       {formatMonthLabel(monthStart)}
                     </th>
@@ -355,12 +356,12 @@ function RoutineDetail({ state, routine }: { state: DailyState; routine: Routine
                     <td className="py-2 text-right tabular-nums font-medium text-ink">
                       {stats.due === 0 ? "—" : `${Math.round(stats.rate * 100)}%`}
                     </td>
-                  </tr>
+                  </Tr>
                 );
               })}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
+        </TableScroll>
       </Card>
     </div>
   );

@@ -23,6 +23,7 @@ import { useDailyStore } from "@/lib/store";
 import type { DivinationRecord } from "@/lib/types";
 
 import { HexagramFigure, HexagramLines } from "./hexagram-lines";
+import { DataTable, TableScroll, Tr } from "@/components/data-table";
 
 const NUMBER_GROUPS = [
   { start: 0, label: "上卦" },
@@ -715,10 +716,10 @@ function HistoryTable({ records }: { records: DivinationRecord[] }) {
         </p>
       ) : (
         // 五欄在手機上塞不下，橫向捲動比硬擠或砍欄位好。
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[540px] text-[13px]">
+        <TableScroll className="mt-3 overflow-x-auto">
+          <DataTable tableKey="divination-history" className="w-full min-w-[540px] text-[13px]">
             <thead>
-              <tr className="border-b border-line text-left text-ink-muted">
+              <Tr className="border-b border-line text-left text-ink-muted">
                 <th scope="col" className="py-2 pr-3 font-medium">
                   日期
                 </th>
@@ -734,14 +735,14 @@ function HistoryTable({ records }: { records: DivinationRecord[] }) {
                 <th scope="col" className="py-2">
                   <span className="sr-only">操作</span>
                 </th>
-              </tr>
+              </Tr>
             </thead>
             <tbody>
               {filtered.map((record) => {
                 const open = openId === record.id;
                 return (
                   <Fragment key={record.id}>
-                    <tr className="border-b border-line/70">
+                    <Tr className="border-b border-line/70">
                       <td className="py-2 pr-3 align-top whitespace-nowrap tabular-nums text-ink-muted">
                         {tableDate(record.createdAt)}
                       </td>
@@ -766,23 +767,23 @@ function HistoryTable({ records }: { records: DivinationRecord[] }) {
                           {open ? "收起" : "展開"}
                         </Button>
                       </td>
-                    </tr>
+                    </Tr>
                     {open ? (
-                      <tr className="border-b border-line/70 bg-surface-muted/40">
+                      <Tr className="border-b border-line/70 bg-surface-muted/40">
                         <td colSpan={5} className="py-3">
                           <RecordDetail
                             record={record}
                             onSaveNote={(note) => setDivinationNote(record.id, note)}
                           />
                         </td>
-                      </tr>
+                      </Tr>
                     ) : null}
                   </Fragment>
                 );
               })}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
+        </TableScroll>
       )}
     </Card>
   );
