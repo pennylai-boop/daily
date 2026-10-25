@@ -231,7 +231,7 @@ function permutation(ids: string[], saved: string[] | null): number[] {
     // 新出現的欄位：接在原本前一欄之後
     return last + 0.5 + i * 1e-4;
   });
-  return idx.sort((a, b) => rank[a] - rank[b]);
+  return idx.sort((a, b) => rank[a]! - rank[b]!);
 }
 
 /* ───────────────────────── Context ───────────────────────── */
@@ -282,10 +282,10 @@ export function Tr({ children, ...rest }: HTMLAttributes<HTMLTableRowElement>) {
     return (
       <tr {...rest}>
         {perm.map((i) => {
-          const { el, id } = cells[i];
+          const { el, id } = cells[i]!;
           const isLocked = locked.has(id);
           const p = el.props;
-          const target = ctx.dropTarget?.id === id ? ctx.dropTarget.side : null;
+          const target = ctx.dropTarget?.id === id ? ctx.dropTarget!.side : null;
           const style: CSSProperties = {
             ...(p.style as CSSProperties | undefined),
             ...(isLocked ? null : { cursor: ctx.dragId ? "grabbing" : "grab" }),
@@ -316,7 +316,7 @@ export function Tr({ children, ...rest }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr {...rest}>
       {header.perm.map((i) => {
-        const el = cells[i].el;
+        const el = cells[i]!.el;
         return cloneElement(el, { key: el.key ?? `c${i}` });
       })}
     </tr>
@@ -471,7 +471,8 @@ export function TableScroll({
     <ScrollContext.Provider value={scrollCtx}>
       <div
         ref={ref}
-        className={className}
+        // relative：讓表格內 absolute 元素（如 sr-only）以捲動區為定位基準而被裁切，否則會撐寬整頁、手機版被縮放
+        className={className ? `relative ${className}` : "relative"}
         {...rest}
         onPointerEnter={(e) => {
           enter();
@@ -612,7 +613,7 @@ function DataTableInner({ tableKey, className, children, ...props }: DataTablePr
       if (at < 0) return;
       shown.splice(t.side === "before" ? at : at + 1, 0, d.id);
       const isDefault = shown.every((id, i) => id === header.ids[i]);
-      setTableOrder(tableKey, isDefault ? null : shown);
+      setTableOrder(tableKey, isDefault ? null : (shown as string[]));
       // 拖曳結束後吞掉下一次 click，避免觸發表頭排序按鈕
       const swallow = (ev: MouseEvent) => {
         ev.stopPropagation();
